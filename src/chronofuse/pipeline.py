@@ -17,8 +17,11 @@ Online (``run``), per query (1a) or step (1b):
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterator
+from dataclasses import asdict
 from pathlib import Path
 
+import orjson
 from tqdm import tqdm
 
 from .config import Config, resolve_path
@@ -26,7 +29,7 @@ from .data.reteco import Query, load_corpus, load_guidance, load_queries, load_s
 from .indexing.base import Ranking
 from .indexing.bm25_index import BM25Index
 from .metadata.chunking import chunk_document
-from .metadata.profile import build_profile, read_profiles, write_profiles
+from .metadata.profile import build_profile, read_profiles
 from .query.analyzer import LLMQueryAnalyzer, QueryAnalysis, RuleQueryAnalyzer
 from .retrieval.fusion import rrf
 from .retrieval.temporal_scorer import apply_temporal_prior
@@ -45,14 +48,9 @@ def build_domain(cfg: Config, domain: str, force: bool = False) -> None:
     out = index_dir(cfg, domain)
     out.mkdir(parents=True, exist_ok=True)
     ch = cfg.get("chunking", {})
-    pids, texts, profiles = [], [], []
-    store = DocStore(out / "docs.sqlite")
-    batch: list[tuple[str, str]] = []
 
-    need_bm25 = force or not (out / "bm25").exists()
-    need_prof = force or not (out / "profiles.jsonl").exists()
-    for doc in tqdm(load_corpus(root, domain), desc=f"[{domain}] read+chunk"):
-        if need_bm25 or cfg.get("dense.enabled", False):
+    def passages(docs) -> Iterator[tuple[str, str]]:
+        for doc in docs:
             for p in chunk_document(
                 doc.id,
                 doc.content,
@@ -60,31 +58,54 @@ def build_domain(cfg: Config, domain: str, force: bool = False) -> None:
                 ch.get("overlap", 40),
                 ch.get("max_passages", 64),
             ):
-                pids.append(p.pid)
-                texts.append(p.text)
-        if need_prof:
-            profiles.append(build_profile(doc))
-            batch.append((doc.id, doc.content))
-            if len(batch) >= 5000:
+                yield p.pid, p.text
+
+    need_bm25 = force or not (out / "bm25").exists()
+    need_prof = force or not (out / "profiles.jsonl").exists()
+
+    # Single streaming pass over the corpus: metadata profiles + doc store are
+    # written as a side effect while passages flow into the BM25 builder.
+    def corpus_pass() -> Iterator:
+        store = DocStore(out / "docs.sqlite") if need_prof else None
+        fprof = open(out / "profiles.jsonl", "wb") if need_prof else None
+        batch: list[tuple[str, str]] = []
+        try:
+            for doc in tqdm(load_corpus(root, domain), desc=f"[{domain}] corpus", mininterval=10):
+                if need_prof:
+                    fprof.write(orjson.dumps(asdict(build_profile(doc))) + b"\n")
+                    batch.append((doc.id, doc.content))
+                    if len(batch) >= 5000:
+                        store.add_many(batch)
+                        batch = []
+                yield doc
+            if batch:
                 store.add_many(batch)
-                batch = []
-    if batch:
-        store.add_many(batch)
-    log.info("[%s] %d passages", domain, len(pids))
+        finally:
+            if fprof:
+                fprof.close()
 
     if need_bm25:
         bm = cfg.get("bm25", {})
-        BM25Index(k1=bm.get("k1", 0.9), b=bm.get("b", 0.4)).build(pids, texts).save(out / "bm25")
-    if need_prof:
-        write_profiles(profiles, out / "profiles.jsonl")
+        idx = BM25Index(k1=bm.get("k1", 0.9), b=bm.get("b", 0.4))
+        idx.build_streaming(passages(corpus_pass()), batch_size=cfg.get("bm25.batch_size", 20000))
+        log.info("[%s] %d passages indexed", domain, len(idx.pids))
+        idx.save(out / "bm25")
+        del idx
+    elif need_prof:
+        for _ in corpus_pass():
+            pass
+
     if cfg.get("kg.enabled", False) and (force or not (out / "kg.pkl").exists()):
         from .kg.temporal_kg import TemporalKG
 
-        prof = profiles or list(read_profiles(out / "profiles.jsonl").values())
+        prof = list(read_profiles(out / "profiles.jsonl").values())
         TemporalKG(max_entity_df=cfg.get("kg.max_entity_df", 0.05)).build(prof).save(out / "kg.pkl")
     if cfg.get("dense.enabled", False) and (force or not (out / "dense").exists()):
         from .indexing.dense_index import DenseIndex
 
+        pairs = list(passages(load_corpus(root, domain)))
+        pids, texts = [p for p, _ in pairs], [t for _, t in pairs]
+        del pairs
         d = cfg.get("dense")
         DenseIndex(
             model_name=d.get("model"),

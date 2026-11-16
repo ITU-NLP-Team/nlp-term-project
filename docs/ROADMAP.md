@@ -6,15 +6,15 @@ geçen, ablation'larla desteklenmiş bir sistem ve ACL formatında makale.
 | Faz | İçerik | Çıktı | Durum |
 |---|---|---|---|
 | 0 | Görev analizi, veri şeması, proje iskeleti, makale şablonu | bu repo | ✅ |
-| 1 | Tüm Track 1 verisini indir, E0 BM25'i resmi baseline ile karşılaştır (±0.01) | `results/metrics/e0_*` | ⏳ |
-| 2 | Metadata analizi: doküman yıl kapsamı, guidance istatistikleri (intent dağılımı) | makale §3.1 tablo | |
-| 3 | E1 temporal prior, λ'yı train'de ayarla | E1 sonuçları | |
-| 4 | Dense indeks (GPU: Colab/Kaggle) + Qdrant + KG → E2 | E2 sonuçları | |
-| 5 | LLM sorgu analizcisi (guidance-distilled), analizci doğruluğu dev'de ölçülür | E3a | |
-| 6 | Cross-encoder + LLM listwise rerank → E3 | E3 sonuçları | |
-| 7 | (Opsiyonel) RAPTOR tarzı domain-içi küme özetleri kanalı; reasoning embedder (ör. ReasonIR) | E4 | |
-| 8 | Ablation, domain ve temporal-intent analizi, hata analizi, figürler | makale §5 | |
-| 9 | Makale yazımı, Limitations, kod yayını; Ocak 2027 test penceresinde submission | PDF + runs | |
+| 1 | Tüm Track 1 verisi (v1.1), pasaj BM25 (resmî baseline'ın üstünde: .197 / .223) | `bench_dev.json` | ✅ |
+| 2 | Metadata / zamansal veri analizi (altın dokümanlar vs. BM25 hataları) | makale Tablo 1 | ✅ |
+| 3 | Zamansal prior, yıl indeksi, zamansal KG, zamansal PRF (train'de ayar) | makale Tablo 3 | ✅ (fayda yok) |
+| 4 | Dense indeks (Qwen3-Embedding-0.6B, A100) + RAPTOR / temporal RAPTOR | makale Tablo 3 | ✅ |
+| 5 | LLM sorgu planlayıcı (Qwen3-8B, olay örgüsü, multi-query, q2d, LLM-PRF) | makale Tablo 3 | ✅ |
+| 6 | Cross-encoder vs. cross-decoder rerank (top-100 → top-10), havuz seçimi | makale Tablo 4 | ✅ |
+| 7 | Nihai sistem: 1a .371, 1b .341 (dev) | makale Tablo 2 | ✅ |
+| 8 | Domain ve intent analizi, figürler, makale ve sunum | `paper/main.pdf`, sunum | ✅ |
+| 9 | 4B reranker'ı 1b ve seçilen havuzda çalıştırmak, listwise; Ocak 2027 test penceresinde submission | runs | ⏳ |
 
 ## Kurallar
 - Ayarlama **train**'de, raporlama **dev**'de. Guidance/gold hiçbir zaman değerlendirilen sorgu için girdi değildir.

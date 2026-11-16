@@ -1,0 +1,23 @@
+\begin{table}[t]
+\centering
+\small
+\begin{tabular}{lr}
+\toprule
+Train queries & 1211 \\
+\quad with an explicit year (rule extractor) & 43.4\% \\
+\quad with a relative time expression & 65.6\% \\
+\quad marked temporal in the guidance & 95.0\% \\
+Gold documents per query & 3.60 \\
+\midrule
+Corpus documents with $\geq$1 year & 39.7\% \\
+Gold documents with $\geq$1 year & 53.4\% \\
+BM25 top-10 non-gold with $\geq$1 year & 65.4\% \\
+\midrule
+\multicolumn{2}{l}{\textit{Queries with an explicit year:}} \\
+\quad gold docs overlapping a query year & 34.0\% \\
+\quad BM25 top-10 non-gold overlapping & 42.6\% \\
+\bottomrule
+\end{tabular}
+\caption{Temporal statistics of RETECO Track~1 (train). Gold evidence carries \emph{fewer} explicit years, and overlaps the query's years \emph{less} often, than the non-relevant documents BM25 ranks highly.}
+\label{tab:data}
+\end{table}

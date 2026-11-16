@@ -1,6 +1,28 @@
 \section*{Limitations}
 % Required by ACL; does not count toward the page limit.
-Rule-based temporal extraction misses implicit periods expressed through events, which the
-LLM analyzer only partially recovers. LLM-based components add cost and latency and depend on a
-specific model version. All data is English StackExchange text, so findings may not transfer to
-other languages or genres. \todo{expand}
+\paragraph{Evaluation.} All numbers are on the released dev split; the hidden test set uses
+newly annotated queries, so absolute scores may differ. Dev domains are small (3--240 queries),
+so per-domain differences are noisy; we therefore report macro averages with a pooled
+significance test and select every configuration on train.
+
+\paragraph{Models and compute.} The generator (Qwen3-8B), the cross-decoders (0.6B/4B) and the
+embedder (0.6B) are mid-sized open models; larger LLMs or reasoning-trained retrievers
+\citep{shao2025reasonir} may change the ranking of components, in particular for query
+planning and reranking. RAPTOR nodes are centroids rather than LLM summaries, which
+was necessary at 1.17M documents but departs from the original method. GPU time on a shared
+cluster also bounded the reranking study: the 4B cross-decoder is missing for 1b (train steps
+and the \emph{history} dev steps), the final fusion reuses one reranking of the BM25 $\oplus$
+dense candidates instead of re-scoring the selected pool, and a RankGPT-style listwise stage
+with Qwen3-8B \citep{sun2023rankgpt}, implemented in our code, could not be evaluated at full
+scale. LLM components add
+latency and depend on a specific model version; all LLM outputs are cached for
+reproducibility.
+
+\paragraph{Temporal metadata.} Temporal profiles come from a rule-based extractor that misses
+implicit periods expressed through events (``after the halving'') and may treat numbers such
+as model years or block heights as dates. Entities are capitalised spans rather than linked
+entities, which limits the knowledge graph.
+
+\paragraph{Data.} All text is English StackExchange content; findings may not transfer to
+other languages, genres or to temporally dense news corpora, where explicit dates are more
+reliable signals.

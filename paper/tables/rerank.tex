@@ -1,0 +1,21 @@
+\begin{table}[t]
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{llcccc}
+\toprule
+ & & \multicolumn{2}{c}{\textbf{1a dev}} & \multicolumn{2}{c}{\textbf{1b dev}} \\
+\cmidrule(lr){3-4}\cmidrule(lr){5-6}
+\textbf{Reranker} & & pure & $\oplus$pool & pure & $\oplus$pool \\
+\midrule
+none (BM25 $\oplus$ dense) & & \multicolumn{2}{c}{.281} & \multicolumn{2}{c}{.309} \\
+MiniLM-L12 (33M) & enc. & .179$^{\dagger}$ & .258$^{\dagger}$ & .233$^{\dagger}$ & .296$^{\dagger}$ \\
+BGE-v2-m3 (568M) & enc. & .215 & .277$^{\dagger}$ & .275$^{\dagger}$ & .317$^{\dagger}$ \\
+Qwen3-Rerank. 0.6B & dec. & .283$^{\dagger}$ & .320$^{\dagger}$ & .319$^{\dagger}$ & .341$^{\dagger}$ \\
+Qwen3-Rerank. 4B & dec. & .352$^{\dagger}$ & .352$^{\dagger}$ & -- & -- \\
+\bottomrule
+\end{tabular}}
+\caption{Pointwise reranking of the same top-100 (BM25 $\oplus$ dense, RRF): encoder cross-encoders vs.\ decoder LLM rerankers (``cross-decoders''). \emph{pure}: sorted by the reranker; $\oplus$\emph{pool}: RRF of reranker and pool ranks. Macro nDCG@10, dev.}
+\label{tab:rerank}
+\end{table}

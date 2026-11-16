@@ -1,24 +1,43 @@
 \section{Background}
 \label{sec:background}
 
-\paragraph{Task.} Track~1 of RETECO (TEMPO) contains 1{,}730 train/dev queries over 13 domains
-(blockchain, social sciences, applied and STEM StackExchange sites), each with its own corpus
-(1{,}167{,}159 documents in total, v1.1). In Sub-track~1a a system ranks documents for the whole
-query; in Sub-track~1b it ranks documents for each of 3{,}976 decomposed reasoning steps. The
-official metric is binary nDCG@10, averaged per domain and then macro-averaged across domains.
-Train/dev splits are 70/30 per domain; the hidden test set has $\sim$350 newly annotated queries.
+\paragraph{Task.} Track~1 of RETECO is built on TEMPO \citep{abdallah2026tempo}: StackExchange
+questions from 13 domains (blockchain, social sciences, applied and STEM sites), each domain
+with its own corpus (1{,}167{,}159 documents in v1.1, after deduplication). In Sub-track~1a a
+system ranks documents for the whole question; in Sub-track~1b it ranks documents for each
+step of an annotated reasoning decomposition. Relevance is binary and requires a passage to be
+both topical and temporally useful. The metric is nDCG@10, averaged per domain and
+macro-averaged over domains. The released train/dev splits are 70/30 per domain; the test set
+is hidden. For train/dev queries, TEMPO also releases \emph{query guidance}---temporal intent,
+expected granularity, time anchors, temporal events and a step-wise retrieval plan---which is
+not available at test time.
 
-\paragraph{Guidance annotations.} For train/dev queries, TEMPO additionally releases
-\emph{query guidance}: whether the query is temporal, its temporal intent, expected granularity,
-time anchors, temporal events and a step-wise retrieval plan, plus per-passage temporal
-annotations. These are unavailable at test time; \sys uses them only as supervision.
+\paragraph{Lexical and dense retrieval.} BM25 \citep{robertson2009bm25} remains a strong
+first stage; passage-level scoring with MaxP \citep{dai2019maxp} handles long documents.
+Pseudo-relevance feedback (RM3; \citealp{lavrenko2001relevance,abduljaleel2004umass}) expands a
+query with terms from its top results. Dense bi-encoders \citep{karpukhin2020dpr,xiao2023cpack}
+and recent LLM-based embedders \citep{zhang2025qwen3emb} capture semantic similarity;
+reciprocal rank fusion (RRF; \citealp{cormack2009rrf}) is a robust way to combine rankings.
+Reasoning-intensive benchmarks such as BRIGHT \citep{su2025bright} show that both families
+struggle when relevance requires inference, which motivated reasoning-trained retrievers
+\citep{shao2025reasonir}.
 
-\paragraph{Related work.}
-\emph{Hybrid retrieval and fusion:} BM25 \citep{robertson2009bm25}, dense bi-encoders
-\citep{karpukhin2020dpr,xiao2023cpack}, and reciprocal rank fusion \citep{cormack2009rrf}.
-\emph{LLM-based query expansion and reranking:} HyDE \citep{gao2023hyde} and listwise LLM
-reranking \citep{sun2023rankgpt}. \emph{Structure-aware RAG:} hierarchical summarisation
-\citep{sarthi2024raptor} and graph-based retrieval \citep{edge2024graphrag,gutierrez2024hipporag}.
-\emph{Temporal IR:} temporal expression tagging \citep{strotgen2010heideltime} and time-aware
-ranking \citep{campos2014survey}. \emph{Reasoning-intensive retrieval:} BRIGHT \citep{su2025bright}.
-\todo{position \sys relative to TEMPO's reported best systems}
+\paragraph{LLMs for retrieval.} LLMs rewrite queries by generating hypothetical documents
+(HyDE, \citealp{gao2023hyde}; query2doc, \citealp{wang2023query2doc}) or multiple sub-queries
+whose results are fused \citep{rackauckas2024ragfusion}. For reranking, encoder
+cross-encoders \citep{nogueira2019passage} were followed by sequence-to-sequence
+\citep{nogueira2020monot5} and decoder-only pointwise rerankers \citep{zhang2025qwen3emb}, and
+by listwise prompting with sliding windows \citep{sun2023rankgpt}.
+
+\paragraph{Structure-aware retrieval.} RAPTOR \citep{sarthi2024raptor} builds a tree of
+recursive cluster summaries; GraphRAG \citep{edge2024graphrag} and HippoRAG
+\citep{gutierrez2024hipporag} retrieve through entity graphs, the latter with personalised
+PageRank. Cluster-based retrieval in IR \citep{liu2004cluster,kurland2004corpus} smooths a
+document's score with that of its cluster.
+
+\paragraph{Temporal IR.} Temporal expression taggers \citep{strotgen2010heideltime} normalise
+dates; time-aware ranking combines textual relevance with a temporal similarity between query
+and document \citep{campos2014survey}, and the temporal profile of a query can be estimated from
+the dates of its top-ranked documents \citep{jones2007temporal}. TEMPO's analysis reports that
+lexical, dense and reasoning retrievers all stay far below their performance on non-temporal
+benchmarks \citep{abdallah2026tempo}; we test which of the above ideas transfer.

@@ -6,6 +6,14 @@ data/indexes/*
 results/runs/*
 results/metrics/*
 !results/**/.gitkeep
+# small result summaries are kept for the paper (per-query files and stage caches are not)
+!results/metrics/bench_dev.json
+!results/metrics/bench_train.json
+!results/metrics/pool_selection.json
+!results/metrics/analysis_dev.json
+!results/metrics/data_analysis_train.json
+results/cache*/
+logs/
 .cache/
 third_party/
 

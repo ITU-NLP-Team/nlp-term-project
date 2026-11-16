@@ -1,0 +1,259 @@
+{
+ "intent": {
+  "bm25": {
+   "duration": [
+    0.1489,
+    49
+   ],
+   "order": [
+    0.2171,
+    19
+   ],
+   "none": [
+    0.1283,
+    29
+   ],
+   "timeline": [
+    0.2402,
+    104
+   ],
+   "when": [
+    0.2228,
+    115
+   ],
+   "causation_analysis": [
+    0.2772,
+    3
+   ],
+   "before_after": [
+    0.2632,
+    13
+   ],
+   "after": [
+    0.3125,
+    2
+   ],
+   "ongoing_status": [
+    0.2102,
+    56
+   ],
+   "period_definition": [
+    0.2012,
+    95
+   ],
+   "trends_changes_and_cross_period": [
+    0.3799,
+    2
+   ],
+   "event_verification_and_authenticity": [
+    0.4444,
+    16
+   ],
+   "historical_attribution_and_context": [
+    0.4735,
+    2
+   ],
+   "origins_evolution_comparative_analysis": [
+    0.2195,
+    13
+   ],
+   "event_analysis_and_localization": [
+    0.0,
+    1
+   ]
+  },
+  "dense": {
+   "duration": [
+    0.2338,
+    49
+   ],
+   "order": [
+    0.3119,
+    19
+   ],
+   "none": [
+    0.1925,
+    29
+   ],
+   "timeline": [
+    0.2704,
+    104
+   ],
+   "when": [
+    0.3202,
+    115
+   ],
+   "causation_analysis": [
+    0.375,
+    3
+   ],
+   "before_after": [
+    0.2313,
+    13
+   ],
+   "after": [
+    0.2696,
+    2
+   ],
+   "ongoing_status": [
+    0.3016,
+    56
+   ],
+   "period_definition": [
+    0.261,
+    95
+   ],
+   "trends_changes_and_cross_period": [
+    0.4159,
+    2
+   ],
+   "event_verification_and_authenticity": [
+    0.3954,
+    16
+   ],
+   "historical_attribution_and_context": [
+    0.352,
+    2
+   ],
+   "origins_evolution_comparative_analysis": [
+    0.429,
+    13
+   ],
+   "event_analysis_and_localization": [
+    0.4893,
+    1
+   ]
+  },
+  "pool_sel": {
+   "duration": [
+    0.2983,
+    49
+   ],
+   "order": [
+    0.3533,
+    19
+   ],
+   "none": [
+    0.2293,
+    29
+   ],
+   "timeline": [
+    0.3039,
+    104
+   ],
+   "when": [
+    0.3448,
+    115
+   ],
+   "causation_analysis": [
+    0.3894,
+    3
+   ],
+   "before_after": [
+    0.3054,
+    13
+   ],
+   "after": [
+    0.148,
+    2
+   ],
+   "ongoing_status": [
+    0.3152,
+    56
+   ],
+   "period_definition": [
+    0.312,
+    95
+   ],
+   "trends_changes_and_cross_period": [
+    0.4159,
+    2
+   ],
+   "event_verification_and_authenticity": [
+    0.4717,
+    16
+   ],
+   "historical_attribution_and_context": [
+    0.4302,
+    2
+   ],
+   "origins_evolution_comparative_analysis": [
+    0.4456,
+    13
+   ],
+   "event_analysis_and_localization": [
+    0.4939,
+    1
+   ]
+  },
+  "chronofuse": {
+   "duration": [
+    0.3612,
+    49
+   ],
+   "order": [
+    0.3461,
+    19
+   ],
+   "none": [
+    0.312,
+    29
+   ],
+   "timeline": [
+    0.3457,
+    104
+   ],
+   "when": [
+    0.3731,
+    115
+   ],
+   "causation_analysis": [
+    0.4179,
+    3
+   ],
+   "before_after": [
+    0.2977,
+    13
+   ],
+   "after": [
+    0.2096,
+    2
+   ],
+   "ongoing_status": [
+    0.3361,
+    56
+   ],
+   "period_definition": [
+    0.3431,
+    95
+   ],
+   "trends_changes_and_cross_period": [
+    0.4024,
+    2
+   ],
+   "event_verification_and_authenticity": [
+    0.4611,
+    16
+   ],
+   "historical_attribution_and_context": [
+    0.4265,
+    2
+   ],
+   "origins_evolution_comparative_analysis": [
+    0.4858,
+    13
+   ],
+   "event_analysis_and_localization": [
+    0.5925,
+    1
+   ]
+  }
+ },
+ "planner": {
+  "queries": 519,
+  "intent_acc": 0.341,
+  "window_hit_when_gold_has_year": 0.755,
+  "gold_with_year": 220,
+  "avg_events": 2.23
+ }
+}

@@ -17,19 +17,34 @@
 \usepackage{amsmath,amssymb}
 \usepackage{xcolor}
 \usepackage{xspace}
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta}
 
 \newcommand{\sys}{\textsc{ChronoFuse}\xspace}
 \newcommand{\todo}[1]{\textcolor{red}{[TODO: #1]}}
+\input{tables/numbers}
+\newcommand{\computenote}{Embedding the 2.41M passages took about 3.5 A100-hours
+($\sim$190 passages/s); building the RAPTOR trees is CPU-bound and took up to 3.5 hours for
+the largest domain (\emph{history}, 200k documents). One planning pass over the 1{,}730
+questions takes $\sim$9 minutes with vLLM. Reranking 100 candidates (including candidate
+rendering) takes 0.32\,s per topic with MiniLM, 0.39\,s with BGE-v2-m3, 1.05\,s with
+Qwen3-Reranker-0.6B and 3.8\,s with Qwen3-Reranker-4B.}
+\newcommand{\ConclusionLLM}{An LLM planner that sees the top BM25 hits (LLM-PRF) turns noisy
+feedback into useful expansions where RM3 fails, and its channels complement dense retrieval
+in the train-selected pool.}
+\newcommand{\ConclusionRerank}{To select the top-10 from a top-100, decoder LLM rerankers
+prompted with the task's notion of relevance clearly beat encoder cross-encoders, which
+\emph{hurt} on long StackExchange questions; the LLM backbone matters more than its size.}
+\newcommand{\AbstractRerank}{LLM-based components: an LLM planner fed with BM25 feedback
+beats statistical feedback, and decoder LLM rerankers improve the top-10 of a hybrid top-100
+where encoder cross-encoders hurt.}
 
-\title{\sys at SemEval-2027 Task 1: Metadata- and Time-Aware Hybrid Retrieval \\
-       with Guidance-Distilled Temporal Query Understanding}
+\title{\sys at SemEval-2027 Task 1: Passages, Dense Retrieval and LLM Reranking
+       Beat Date Matching for Temporal Reasoning-Intensive Retrieval}
 
-\author{Author One \\
+\author{Ahmet \"{O}nder \"{O}nl\"{u} \\
   Istanbul Technical University \\
-  \texttt{onlu26@itu.edu.tr} \\\And
-  Author Two \\
-  Istanbul Technical University \\
-  \texttt{\todo{email}} \\}
+  \texttt{onlu26@itu.edu.tr}}
 
 \begin{document}
 \maketitle

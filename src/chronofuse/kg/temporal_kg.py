@@ -71,7 +71,10 @@ class TemporalKG:
                 if len(nodes) > 50000:
                     break
         sub = self.g.subgraph(nodes)
-        pr = nx.pagerank(sub, alpha=alpha, personalization=pers, max_iter=50, tol=1e-6)
+        try:
+            pr = nx.pagerank(sub, alpha=alpha, personalization=pers, max_iter=200, tol=1e-5)
+        except nx.PowerIterationFailedConvergence:
+            return []
         docs = [(n[4:], s) for n, s in pr.items() if n.startswith("doc:")]
         return sorted(docs, key=lambda kv: -kv[1])[:k]
 

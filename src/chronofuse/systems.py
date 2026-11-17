@@ -148,6 +148,61 @@ def s_late(name: str) -> SystemFn:
     return fn
 
 
+_PERIODS: dict = {}
+
+
+def _periods(dom) -> dict[str, tuple[int, int]]:
+    """doc id -> LLM-extracted (start, end) period (memoised; documents without one omitted)."""
+    if dom not in _PERIODS:
+        from .metadata.llm_meta import load_doc_meta
+
+        _PERIODS[dom] = {
+            d: (m["sy"], m["ey"]) for d, m in load_doc_meta(dom).items() if m.get("sy")
+        }
+    return _PERIODS[dom]
+
+
+def period_score(window: tuple[int, int], period: tuple[int, int] | None) -> float:
+    """1 when the document's period overlaps the query's, decaying with the gap in years;
+    documents without a period are neutral (0.5)."""
+    if period is None:
+        return 0.5
+    gap = max(0, period[0] - window[1], window[0] - period[1])
+    return 1.0 / (1.0 + gap / 2.0)
+
+
+def s_meta_prior(base: str = "pool") -> SystemFn:
+    """A ranking re-scored with the LLM-period match: (1-λ)·minmax(score) + λ·period_score."""
+
+    def fn(dom, split, sub, hp):
+        from .bench import query_window
+
+        run = _get(dom, split, sub, base)
+        lam = hp.get("lam", 0.0)
+        if lam == 0:
+            return run
+        qm = load_stage(dom, split, sub, "qmeta")
+        if qm is None:
+            raise MissingStage(f"{dom}/{split}_{sub}/qmeta")
+        per = _periods(dom)
+        win = {t.qid: query_window(t, qm) for t in load_topics(dom, split, sub)}
+        out = {}
+        for q, r in run.items():
+            w = win.get(q)
+            if not r or w is None:
+                out[q] = r
+                continue
+            vals = [s for _, s in r]
+            lo, span = min(vals), (max(vals) - min(vals)) or 1.0
+            rs = [
+                (d, (1 - lam) * (s - lo) / span + lam * period_score(w, per.get(d))) for d, s in r
+            ]
+            out[q] = sorted(rs, key=lambda x: -x[1])
+        return out
+
+    return fn
+
+
 def s_listwise(dom, split, sub, hp) -> Run:
     from .bench import listwise_base
 
@@ -172,7 +227,18 @@ CHANNELS = [
     "raptor_t",
     "kg",
     "timefilter",
+    # small-LLM metadata and neighbouring-event expansion
+    "meta_kw",
+    "meta_field",
+    "meta_tf_bm25",
+    "meta_tf_dense",
+    "nbr_bm25",
+    "nbr_hybrid",
+    # ReasonIR-8B, plain and with LLM-reasoning queries
+    "rir",
+    "rir_reason",
 ]
+META = ["bm25", "dense", "meta_kw", "meta_field", "meta_tf_bm25", "meta_tf_dense"]
 
 # (id, group, label, fn, grid)
 SYSTEMS: list[tuple[str, str, str, SystemFn | None, dict]] = [
@@ -217,6 +283,35 @@ SYSTEMS: list[tuple[str, str, str, SystemFn | None, dict]] = [
     ("llm_kw_fb", "llm", "LLM-PRF keyword expansion", s_stage("llm_kw_fb"), {}),
     ("llm_q2d_fb", "llm", "LLM-PRF query2doc", s_stage("llm_q2d_fb"), {}),
     ("llm_multi_fb", "llm", "LLM-PRF multi-query + event chain", s_stage("llm_multi_fb"), {}),
+    ("meta_kw", "meta", "BM25 + small-LLM events/entities/keywords", s_stage("meta_kw"), {}),
+    ("meta_field", "meta", "BM25 over LLM document metadata", s_stage("meta_field"), {}),
+    ("meta_tf_bm25", "meta", "BM25, LLM-period filter", s_stage("meta_tf_bm25"), {}),
+    ("meta_tf_dense", "meta", "dense, LLM-period filter", s_stage("meta_tf_dense"), {}),
+    (
+        "meta_prior",
+        "meta",
+        "BM25 ⊕ dense + LLM-period prior",
+        s_meta_prior("pool"),
+        {"lam": [0.0, 0.05, 0.1, 0.2, 0.3]},
+    ),
+    ("meta_hybrid", "meta", "BM25 ⊕ dense ⊕ metadata channels (filtered)", s_fuse(META), {}),
+    ("nbr_bm25", "meta", "neighbouring events + sub-queries (BM25)", s_stage("nbr_bm25"), {}),
+    (
+        "nbr_hybrid",
+        "meta",
+        "neighbouring events + sub-queries (BM25 ⊕ dense)",
+        s_stage("nbr_hybrid"),
+        {},
+    ),
+    ("rir", "dense", "ReasonIR-8B (passages, full query)", s_stage("rir"), {}),
+    ("rir_reason", "dense", "ReasonIR-8B + LLM reasoning query", s_stage("rir_reason"), {}),
+    (
+        "rir+rir_reason",
+        "dense",
+        "ReasonIR ⊕ ReasonIR + reasoning",
+        s_fuse(["rir", "rir_reason"]),
+        {},
+    ),
     ("pool_sel", "pool", "train-selected hybrid pool (RRF)", s_stage("pool_sel"), {}),
 ]
 RR_LABEL = {
@@ -400,15 +495,19 @@ def _final_systems(sel: dict, sub: str) -> list:
     """Final systems: the selected pool fused with each reranker's ranking of the BM25 ⊕ dense
     top-100, and ChronoFuse = the variant with the best macro nDCG@10 on train for this
     sub-track (rerankers not run on that train split are not candidates)."""
-    out, train = [], {}
+    out, train, fns = [], {}, {}
     for r in RERANKERS:
-        fn = s_late(r)
-        out.append((f"late_{r}", "final", f"selected pool ⊕ {RR_LABEL[r]}", fn, {}))
-        e = evaluate(fn, "train", sub, {})
-        if e:
-            train[r] = e["macro"]
+        for sid, label, fn in (
+            (f"late_{r}", f"selected pool ⊕ {RR_LABEL[r]}", s_late(r)),
+            # the selected pool's own top-100 reranked (needs the ``<r>@sel`` stage)
+            (f"sel_{r}", f"selected pool → {RR_LABEL[r]}, ⊕ pool", s_rerank(r, True, "pool_sel")),
+        ):
+            out.append((sid, "final", label, fn, {}))
+            e = evaluate(fn, "train", sub, {})
+            if e:
+                train[sid], fns[sid] = e["macro"], fn
     if train:
         best = max(train, key=train.get)
         FINAL_CHOICE[sub] = best
-        out.append(("chronofuse", "final", "ChronoFuse (final, train-selected)", s_late(best), {}))
+        out.append(("chronofuse", "final", "ChronoFuse (final, train-selected)", fns[best], {}))
     return out

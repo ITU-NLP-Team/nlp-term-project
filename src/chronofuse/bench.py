@@ -266,6 +266,14 @@ def model(name: str):
                 from .llm.local import LocalLLM
 
                 m = LocalLLM()
+        elif name == "rir":
+            from .retrieval.reasonir import RIREncoder
+
+            m = RIREncoder()
+        elif name == "small_llm":
+            from .metadata.llm_meta import small_llm
+
+            m = small_llm()
         else:
             raise KeyError(name)
         _MODELS[name] = m
@@ -408,6 +416,16 @@ def dense_dir(ctx: DomainContext) -> Path:
     return ctx.dir / f"dense_{name}"
 
 
+def iter_passages(ctx: DomainContext):
+    """(pid, text) of every passage of the domain, in index order; passages after the first
+    carry the document title as context (the encoder input of every dense channel)."""
+    for doc in load_corpus(resolve_path(DATA), ctx.domain):
+        p = ctx.profiles.get(doc.id)
+        head = f"{p.title[:120]}\n" if p is not None else ""
+        for ps in chunk_document(doc.id, doc.content, *CHUNK):
+            yield ps.pid, (head + ps.text if ps.index else ps.text)
+
+
 def passage_embeddings(ctx: DomainContext) -> tuple[list[str], np.ndarray]:
     """Embed every passage of the domain (same chunking as BM25); cached as fp16."""
     path = dense_dir(ctx)
@@ -415,7 +433,6 @@ def passage_embeddings(ctx: DomainContext) -> tuple[list[str], np.ndarray]:
         return orjson.loads((path / "pids.json").read_bytes()), np.load(path / "emb.npy")
     enc = model("embed")
     pids, embs, buf = [], [], []
-    root = resolve_path(DATA)
     t0 = time.time()
 
     def flush():
@@ -425,11 +442,8 @@ def passage_embeddings(ctx: DomainContext) -> tuple[list[str], np.ndarray]:
             buf.clear()
             log.info("[%s] dense %d passages (%.0fs)", ctx.domain, len(pids), time.time() - t0)
 
-    for doc in load_corpus(root, ctx.domain):
-        p = ctx.profiles.get(doc.id)
-        head = f"{p.title[:120]}\n" if p is not None else ""
-        for ps in chunk_document(doc.id, doc.content, *CHUNK):
-            buf.append((ps.pid, head + ps.text if ps.index else ps.text))
+    for pid, text in iter_passages(ctx):
+        buf.append((pid, text))
         if len(buf) >= 20000:
             flush()
     flush()
@@ -450,18 +464,26 @@ class DenseSearcher:
         else:
             self.emb = emb.astype(np.float32)
 
-    def search(self, qv: np.ndarray, k: int = DEPTH) -> Ranking:
+    def search(self, qv: np.ndarray, k: int = DEPTH, mask: np.ndarray | None = None) -> Ranking:
+        """Top-k documents (MaxP); ``mask`` (bool per passage) restricts the candidates."""
         n = min(k * 5, len(self.pids))
         if has_gpu():
             import torch
 
             q = torch.from_numpy(qv.astype(np.float16)).cuda()
-            s, i = torch.topk(self.emb @ q, n)
+            sc = self.emb @ q
+            if mask is not None:
+                sc = sc.masked_fill(~torch.from_numpy(mask).cuda(), float("-inf"))
+            s, i = torch.topk(sc, n)
             s, i = s.float().cpu().numpy(), i.cpu().numpy()
         else:
             sc = self.emb @ qv
+            if mask is not None:
+                sc = np.where(mask, sc, -np.inf)
             i = np.argpartition(-sc, n - 1)[:n]
             s = sc[i]
+        keep = np.isfinite(s)
+        i, s = i[keep], s[keep]
         return maxp([self.pids[j] for j in i], s.tolist(), k)
 
 
@@ -641,6 +663,276 @@ def _plan_channels(plan_name: str) -> dict[str, StageFn]:
 
 STAGES.update(_plan_channels("plan"))
 STAGES.update(_plan_channels("plan_fb"))
+
+
+# ------------------------------------- LLM metadata + neighbouring events ----
+# A small LLM extracts {period, events, entities, keywords, topic} from every document
+# (chronofuse.metadata.llm_meta, offline) and from every query (stage ``qmeta``); the planner
+# LLM expands queries with neighbouring events and period-anchored sub-queries (``nbr``).
+def need(ctx: DomainContext, split: str, sub: str, name: str) -> dict:
+    """A cached stage this stage depends on; missing -> fail (instead of a silent fallback)."""
+    out = load_stage(ctx.domain, split, sub, name)
+    if out is None:
+        raise RuntimeError(f"needs stage {name} for {ctx.domain}/{split}_{sub}")
+    return out
+
+
+def _parent_queries(topics: list[Topic]) -> dict[str, Query]:
+    out: dict[str, Query] = {}
+    for t in topics:
+        out.setdefault(t.query.id, t.query)
+    return out
+
+
+@stage("qmeta")  # small LLM, same schema as the documents
+def st_qmeta(ctx, topics, split, sub):
+    from .metadata.llm_meta import META_SCHEMA, generate, meta_messages, normalise_meta
+
+    parents = _parent_queries(topics)
+    outs = generate(
+        model("small_llm"),
+        [meta_messages(q.text, 300) for q in parents.values()],
+        META_SCHEMA,
+        200,
+        cache=True,
+    )
+    m = {qid: normalise_meta(o) for qid, o in zip(parents, outs)}
+    return {t.qid: m[t.query.id] for t in topics}
+
+
+@stage("nbr")  # planner LLM + BM25 snippets: neighbouring events, sub-queries, terms
+def st_nbr(ctx, topics, split, sub):
+    from .metadata.llm_meta import EXPAND_SCHEMA, expand_messages, generate, normalise_expansion
+
+    base = load_stage(ctx.domain, split, "1a", "bm25")
+    if base is None:
+        raise RuntimeError(f"nbr needs the 1a bm25 stage of {ctx.domain}/{split}")
+    parents = _parent_queries(topics)
+    convs = []
+    for qid, q in parents.items():
+        docs = [d for d, _ in base.get(qid, [])[:5]]
+        texts = ctx.store.get_many(docs)
+        convs.append(
+            expand_messages(q.text, [" ".join(texts.get(d, "").split()[:60]) for d in docs])
+        )
+    outs = generate(model("llm"), convs, EXPAND_SCHEMA, 700, cache=True)
+    ex = {qid: normalise_expansion(o) for qid, o in zip(parents, outs)}
+    return {t.qid: ex[t.query.id] for t in topics}
+
+
+def _doc_meta(ctx: DomainContext) -> dict[str, dict]:
+    """The domain's LLM document metadata; refuses to run on an incomplete extraction."""
+    if getattr(ctx, "_meta", None) is None:
+        from .metadata.llm_meta import load_doc_meta
+
+        m = load_doc_meta(ctx.domain)
+        _, docs = ctx.bm25.passage_doc_index()
+        if len(m) < 0.98 * len(docs):
+            raise RuntimeError(f"LLM metadata incomplete for {ctx.domain}: {len(m)}/{len(docs)}")
+        ctx._meta = m
+    return ctx._meta
+
+
+def _doc_periods(ctx: DomainContext) -> tuple[np.ndarray, np.ndarray]:
+    """(start, end) year per document of the BM25 document list; -1 = no period."""
+    if getattr(ctx, "_per", None) is None:
+        m = _doc_meta(ctx)
+        _, docs = ctx.bm25.passage_doc_index()
+        sy = np.array([(m.get(d) or {}).get("sy") or -1 for d in docs], dtype=np.int32)
+        ey = np.array([(m.get(d) or {}).get("ey") or -1 for d in docs], dtype=np.int32)
+        ctx._per = (sy, ey)
+    return ctx._per
+
+
+TIME_TOL = 2  # years of slack around the query period
+
+
+def query_window(t: Topic, qmeta: dict) -> tuple[int, int] | None:
+    """LLM query period, else the explicit years of the query (if they form a usable window)."""
+    m = qmeta.get(t.qid) or {}
+    if m.get("sy"):
+        return m["sy"], m["ey"]
+    if t.years and t.years[-1] - t.years[0] <= 60:
+        return t.years[0], t.years[-1]
+    return None
+
+
+def period_doc_mask(ctx: DomainContext, window: tuple[int, int]) -> np.ndarray:
+    """Documents whose LLM period overlaps the window (± TIME_TOL), or that have no period."""
+    sy, ey = _doc_periods(ctx)
+    a, b = window[0] - TIME_TOL, window[1] + TIME_TOL
+    return (sy < 0) | ((sy <= b) & (ey >= a))
+
+
+def _add(w: dict[str, float], extra: dict[str, float], scale: float = 1.0) -> dict[str, float]:
+    w = dict(w)
+    for k, v in extra.items():
+        w[k] = w.get(k, 0.0) + scale * v
+    return w
+
+
+@stage("meta_kw")  # BM25: query + small-LLM events / entities / keywords
+def st_meta_kw(ctx, topics, split, sub):
+    from .metadata.llm_meta import meta_terms
+
+    qm = need(ctx, split, sub, "qmeta")
+    qw = ctx.bm25.query_weights
+    return {t.qid: _rank(ctx, _add(qw(t.text), qw(meta_terms(qm.get(t.qid))))) for t in topics}
+
+
+def meta_index(ctx: DomainContext) -> BM25Index:
+    """Document-level BM25 over title + LLM metadata (events, entities, keywords, topic)."""
+    from .metadata.llm_meta import meta_terms
+
+    path = ctx.dir / "meta_bm25"
+    if (path / "pids.json").exists():
+        return BM25Index.load(path)
+    m = _doc_meta(ctx)
+    ids = list(m)
+    texts = []
+    for d in ids:
+        p = ctx.profiles.get(d)
+        texts.append(f"{p.title[:150] if p is not None else ''} {meta_terms(m[d])}")
+    idx = BM25Index().build([f"{d}#0" for d in ids], texts)
+    idx.save(path)
+    return idx
+
+
+@stage("meta_field")
+def st_meta_field(ctx, topics, split, sub):
+    from .metadata.llm_meta import meta_terms
+
+    idx = meta_index(ctx)
+    qm = need(ctx, split, sub, "qmeta")
+    out = {}
+    for t in topics:
+        w = _add(idx.query_weights(t.text), idx.query_weights(meta_terms(qm.get(t.qid))))
+        out[t.qid] = [[d, round(float(s), 5)] for d, s in idx.search_weighted(w, DEPTH)]
+    return out
+
+
+@stage("meta_tf_bm25")  # BM25 restricted to documents whose LLM period fits the query's
+def st_meta_tf_bm25(ctx, topics, split, sub):
+    qm = need(ctx, split, sub, "qmeta")
+    base = need(ctx, split, sub, "bm25")
+    pdoc, _ = ctx.bm25.passage_doc_index()
+    out = {}
+    for t in topics:
+        win = query_window(t, qm)
+        if win is None:  # no period: the plain BM25 ranking
+            out[t.qid] = base.get(t.qid, [])
+            continue
+        mask = period_doc_mask(ctx, win)[pdoc].astype(np.float32)
+        out[t.qid] = _rank(ctx, ctx.bm25.query_weights(t.text), mask=mask)
+    return out
+
+
+@stage("meta_tf_dense")  # dense retrieval with the same period filter
+def st_meta_tf_dense(ctx, topics, split, sub):
+    qm = need(ctx, split, sub, "qmeta")
+    base = need(ctx, split, sub, "dense")
+    pids, emb = passage_embeddings(ctx)
+    ctx.bm25  # noqa: B018 - sets ctx.doc_index
+    pd = np.fromiter((ctx.doc_index[p.rsplit("#", 1)[0]] for p in pids), np.int64, len(pids))
+    ds = DenseSearcher(pids, emb)
+    todo = [t for t in topics if query_window(t, qm) is not None]
+    q = model("embed").queries([rerank_query(t) for t in todo]) if todo else []
+    out = {t.qid: base.get(t.qid, []) for t in topics}
+    for t, qv in zip(todo, q):
+        mask = period_doc_mask(ctx, query_window(t, qm))[pd]
+        out[t.qid] = [[d, round(s, 5)] for d, s in ds.search(qv, mask=mask)]
+    del ds
+    return out
+
+
+def _nbr_queries(e: dict) -> list[str]:
+    qs = list(e.get("sub_queries", []))
+    qs += [f"{n['event']} {n['year'] or ''}".strip() for n in e.get("neighbors", [])]
+    return [q for q in qs if q.strip()]
+
+
+@stage("nbr_bm25")  # BM25: query (x2) ⊕ each sub-query / neighbouring event ⊕ query + terms
+def st_nbr_bm25(ctx, topics, split, sub):
+    ex = need(ctx, split, sub, "nbr")
+    base = need(ctx, split, sub, "bm25")
+    qw = ctx.bm25.query_weights
+    out = {}
+    for t in topics:
+        e = ex.get(t.qid, {})
+        runs = {"q": base.get(t.qid, [])}
+        if e.get("terms"):
+            runs["terms"] = ctx.bm25.search_weighted(_add(qw(t.text), qw(" ".join(e["terms"]))))
+        for i, s in enumerate(_nbr_queries(e)):
+            runs[str(i)] = ctx.bm25.search_weighted(qw(s), DEPTH)
+        out[t.qid] = [[d, round(s, 6)] for d, s in rrf(runs, {"q": 2.0}, top=DEPTH)]
+    return out
+
+
+@stage("nbr_hybrid")  # as nbr_bm25, plus dense retrieval for the query and every sub-query
+def st_nbr_hybrid(ctx, topics, split, sub):
+    ex = need(ctx, split, sub, "nbr")
+    lex = load_stage(ctx.domain, split, sub, "nbr_bm25")
+    dense = load_stage(ctx.domain, split, sub, "dense")
+    if lex is None or dense is None:
+        raise RuntimeError("nbr_hybrid needs the nbr_bm25 and dense stages")
+    subs = {t.qid: _nbr_queries(ex.get(t.qid, {})) for t in topics}
+    flat = [s for t in topics for s in subs[t.qid]]
+    vecs = iter(model("embed").queries(flat)) if flat else iter([])
+    pids, emb = passage_embeddings(ctx)
+    ds = DenseSearcher(pids, emb)
+    out = {}
+    for t in topics:
+        runs = {"lex": lex.get(t.qid, []), "dense": dense.get(t.qid, [])}
+        for i, _ in enumerate(subs[t.qid]):
+            runs[f"d{i}"] = ds.search(next(vecs))
+        out[t.qid] = [[d, round(s, 6)] for d, s in rrf(runs, {"lex": 2.0, "dense": 2.0}, top=DEPTH)]
+    del ds
+    return out
+
+
+# ------------------------------------------- ReasonIR + LLM reasoning ----
+@stage("reason")  # planner LLM: free-text reasoning about the question (BRIGHT/TEMPO style)
+def st_reason(ctx, topics, split, sub):
+    from .retrieval.reasonir import REASON_PROMPT
+
+    parents = _parent_queries(topics)
+    convs = [
+        [{"role": "user", "content": REASON_PROMPT.format(query=q.text[:3000])}]
+        for q in parents.values()
+    ]
+    outs = model("llm").chat_many(convs, max_tokens=600)
+    r = {qid: " ".join(o.split()[:350]) for qid, o in zip(parents, outs)}
+    return {t.qid: {"reasoning": r[t.query.id]} for t in topics}
+
+
+def rir_query(t: Topic, reasoning: str = "") -> str:
+    """ReasonIR query: the full question (1b: + the step, like TEMPO's Query+Step) and,
+    optionally, the LLM's reasoning."""
+    q = " ".join(t.query.text.split()[:400])
+    if t.instruction:
+        q += f"\nStep: {t.instruction}"
+    return q + (f"\n{reasoning}" if reasoning else "")
+
+
+def _rir_stage(with_reasoning: bool) -> StageFn:
+    def fn(ctx, topics, split, sub):
+        from .retrieval.reasonir import load_corpus_emb
+
+        rs = need(ctx, split, sub, "reason") if with_reasoning else {}
+        pids, emb = load_corpus_emb(ctx.domain)
+        q = model("rir").queries(
+            [rir_query(t, (rs.get(t.qid) or {}).get("reasoning", "")) for t in topics]
+        )
+        ds = DenseSearcher(pids, emb)
+        out = {t.qid: [[d, round(s, 5)] for d, s in ds.search(qv)] for t, qv in zip(topics, q)}
+        del ds, emb
+        return out
+
+    return fn
+
+
+STAGES["rir"] = _rir_stage(False)
+STAGES["rir_reason"] = _rir_stage(True)
 
 
 # ------------------------------------------------- first-stage pools ----
@@ -856,8 +1148,6 @@ if __name__ == "__main__":
     main()
     # vLLM's engine process can keep the interpreter alive after the work is done; results are
     # already on disk, so exit hard instead of waiting for it.
-    import sys
+    from .llm.vllm_client import hard_exit
 
-    sys.stdout.flush()
-    sys.stderr.flush()
-    os._exit(0)
+    hard_exit()

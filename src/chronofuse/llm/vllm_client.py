@@ -24,9 +24,11 @@ class VLLMChat:
         max_model_len: int = 8192,
         gpu_memory_utilization: float = 0.55,
         cache_dir: str | Path = PROJECT_ROOT / ".cache" / "llm",
+        **engine_kw,
     ):
         self.model = model or os.getenv("CF_LLM", "Qwen/Qwen3-8B")
         self.max_model_len, self.gpu_mem = max_model_len, gpu_memory_utilization
+        self.engine_kw = engine_kw
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self._llm = None
@@ -42,6 +44,7 @@ class VLLMChat:
                 gpu_memory_utilization=self.gpu_mem,
                 dtype="bfloat16",
                 enable_prefix_caching=True,
+                **self.engine_kw,
             )
         return self._llm
 
@@ -53,14 +56,21 @@ class VLLMChat:
         return self.cache_dir / (hashlib.sha256(blob.encode()).hexdigest() + ".json")
 
     def chat_many(
-        self, convs: list[list[dict]], max_tokens: int = 512, schema: dict | None = None
+        self,
+        convs: list[list[dict]],
+        max_tokens: int = 512,
+        schema: dict | None = None,
+        cache: bool = True,
     ) -> list[str]:
-        """Greedy completions; ``schema`` constrains the output to that JSON schema."""
+        """Greedy completions; ``schema`` constrains the output to that JSON schema.
+
+        ``cache=False`` skips the one-file-per-conversation disk cache (corpus-scale jobs keep
+        their own sharded outputs instead of millions of small files)."""
         out: list[str | None] = []
         todo: list[int] = []
         for i, c in enumerate(convs):
             p = self._key(c, max_tokens, schema)
-            if p.exists():
+            if cache and p.exists():
                 out.append(json.loads(p.read_text())["content"])
             else:
                 out.append(None)
@@ -90,7 +100,9 @@ class VLLMChat:
                 text = r.outputs[0].text
                 text = re.sub(r"<think>.*?</think>", "", text, flags=re.S).strip()
                 out[i] = text
-                self._key(convs[i], max_tokens, schema).write_text(json.dumps({"content": text}))
+                if cache:
+                    path = self._key(convs[i], max_tokens, schema)
+                    path.write_text(json.dumps({"content": text}))
         return [o or "" for o in out]
 
     def chat(self, messages: list[dict], max_tokens: int = 512, **_) -> str:
@@ -110,3 +122,22 @@ class VLLMChat:
 
     def chat_json(self, messages: list[dict], max_tokens: int = 512, **_) -> dict:
         return self.parse_json(self.chat(messages, max_tokens))
+
+
+def hard_exit(code: int = 0) -> None:
+    """Exit without waiting for vLLM, and kill its engine-core child processes first: an
+    orphaned engine keeps its GPU memory and makes the next model on that GPU run out of it."""
+    import sys
+
+    sys.stdout.flush()
+    sys.stderr.flush()
+    try:
+        import psutil
+
+        kids = psutil.Process().children(recursive=True)
+        for k in kids:
+            k.kill()
+        psutil.wait_procs(kids, timeout=10)
+    except Exception:  # noqa: BLE001 - best effort
+        pass
+    os._exit(code)

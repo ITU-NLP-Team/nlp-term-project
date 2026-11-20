@@ -1,30 +1,24 @@
 \section*{Limitations}
 % Required by ACL; does not count toward the page limit.
-\paragraph{Evaluation.} All numbers are on the released train and dev splits; the hidden test set
-uses newly annotated queries, so absolute scores may differ. The comparison with the TEMPO
-leaderboard pools train and dev, so it includes the split on which our configuration was
-selected, and uses the deduplicated RETECO corpora rather than the original ones. Dev domains are small (3--240 queries),
-so per-domain differences are noisy; we therefore report macro averages with a pooled
-significance test and select every configuration on train.
+\paragraph{Evaluation.} All numbers are on the released train and dev splits; the hidden test
+set uses newly annotated questions, so absolute scores may differ. The comparison with the
+TEMPO leaderboard pools train and dev, so it includes the split on which our configuration was
+selected, and uses the deduplicated RETECO corpora rather than the original ones. Dev domains
+are small (3--240 questions), so per-domain differences are noisy; we therefore report macro
+averages with a pooled significance test and select every configuration on train.
 
-\paragraph{Models and compute.} The generators (Qwen3-8B, Qwen3-1.7B), the cross-decoders (0.6B/4B)
+\paragraph{Models and compute.} The generators (Qwen3-8B, Qwen3-1.7B), the rerankers (up to 4B)
 and the retrievers (0.6B, 8B) are open models of moderate size; a stronger LLM may change the
 ranking of components, in particular for the reasoning given to ReasonIR, where GPT-4o's
-reasoning is reported to add far more than ours. RAPTOR nodes are centroids rather than LLM summaries, which
-was necessary at 1.17M documents but departs from the original method. GPU time on a shared
-cluster also bounded the reranking study: the 4B cross-decoder is missing for 1b (train steps
-and the \emph{history} dev steps), and a RankGPT-style listwise stage
-with Qwen3-8B \citep{sun2023rankgpt}, implemented in our code, could not be evaluated at full
-scale. LLM components add
-latency and depend on a specific model version; all LLM outputs are cached for
-reproducibility.
+reasoning is reported to add far more than ours. GPU time on a shared cluster bounded the
+reranking study: the 4B reranker was not run on the 2{,}762 train steps of 1b, so 1b uses the
+0.6B model. LLM components add latency and depend on a specific model version; all LLM outputs
+are cached for reproducibility.
 
-\paragraph{Temporal metadata.} Rule-based temporal profiles miss implicit periods expressed
-through events (``after the halving'') and may treat numbers such as model years or block
-heights as dates. The LLM metadata covers implicit periods but reads only a document's
-opening, and a 1.7B model sometimes returns the date of a source (e.g.\ a film's release)
-instead of the period it describes. Entities are capitalised spans rather than linked
-entities, which limits the knowledge graph.
+\paragraph{Metadata.} The small LLM reads only a document's opening, and a 1.7B model
+sometimes returns the date of a source (e.g.\ a film's release) instead of the period it
+describes. Rule-based dates miss implicit periods and may treat numbers such as model years or
+block heights as dates.
 
 \paragraph{Data.} All text is English StackExchange content; findings may not transfer to
 other languages, genres or to temporally dense news corpora, where explicit dates are more

@@ -1,19 +1,15 @@
 \begin{abstract}
 Temporal reasoning-intensive retrieval asks for evidence that is not only on topic but useful
 for the period and events a question depends on. We describe \sys, our system for both
-sub-tracks of RETECO Track~1 (SemEval-2027 Task~1), and use it to test, on all 13 domains and
-1.17M documents, which retrieval ideas transfer to this setting: date-based structures (a year
-index, a temporal knowledge graph, temporal priors and temporal pseudo-relevance feedback),
-periods, events and entities extracted from every document and query by a small LLM, a
-time-aware RAPTOR tree, LLM query planning with event chains, neighbouring events, multi-query,
-query2doc and LLM-based feedback, dense and reasoning-trained retrievers, and encoder vs.\
-decoder rerankers that select the top-10 from a top-100. Matching dates does not help, even
-when the dates are inferred by an LLM: gold documents overlap the query's years \emph{less}
-often than the non-relevant documents BM25 ranks highly. What helps is retrieval granularity
-(passage-level BM25 lifts the official baseline from \rOfficialA{} to \rBmA{} nDCG@10),
-semantic retrieval (\rDenseA{}) and \AbstractRerank{} With every choice made on train, \sys
-reaches \rFinalA{} (1a) and \rFinalB{} (1b) nDCG@10 on dev, \gainOfficialA\% and
-\gainOfficialB\% above the official baseline; on all 1{,}730 TEMPO questions it scores
-\pooledFinalA{} ($\times$100), above the best retriever on the TEMPO leaderboard (32.0) but
-below a reasoning retriever given GPT-4o's reasoning (41.0).
+sub-tracks of RETECO Track~1 (SemEval-2027 Task~1), evaluated on all 13 domains and 1.17M
+documents. \sys retrieves 200-word passages with BM25, a dense embedder and a reasoning-trained
+retriever (ReasonIR-8B), expands each question with an LLM---a hypothetical answer, sub-queries,
+the events \emph{neighbouring} the question, and free-text reasoning---fuses the channels chosen
+on train, and reranks the top-100 with a decoder LLM. Matching dates, by contrast, does not
+help, even when periods are inferred by an LLM for every document and question: gold documents
+mention the question's years \emph{less} often than the non-relevant documents BM25 ranks
+highly. With every choice made on train, \sys reaches \rFinalA{} (1a) and \rFinalB{} (1b)
+nDCG@10 on dev, \gainOfficialA\% and \gainOfficialB\% above the official baseline. On all
+1{,}730 TEMPO questions it scores \pooledFinalA{} (nDCG@10$\times$100), above the best retriever
+on the TEMPO leaderboard (32.0).
 \end{abstract}

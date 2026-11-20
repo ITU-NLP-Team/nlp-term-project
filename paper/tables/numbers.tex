@@ -15,8 +15,8 @@
 \newcommand{\plannerEvents}{2.2}
 \newcommand{\plannerIntentAcc}{34\%}
 \newcommand{\plannerWindowHit}{76\%}
-\newcommand{\poolChannelsA}{neighbouring events, ReasonIR + reasoning ($\times$0.5), dense document vectors ($\times$0.5), LLM multi-query, ReasonIR, dense ($\times$0.5), LLM query2doc ($\times$0.5), metadata field index ($\times$0.5)}
-\newcommand{\poolChannelsB}{ReasonIR, LLM-PRF query2doc ($\times$0.5), dense document vectors ($\times$0.5), LLM query2doc ($\times$0.5), dense ($\times$0.5)}
+\newcommand{\poolChannelsA}{neighbouring events, ReasonIR with LLM reasoning ($\times$0.5), dense document vectors ($\times$0.5), LLM sub-queries, ReasonIR, dense ($\times$0.5), query2doc ($\times$0.5), metadata index ($\times$0.5)}
+\newcommand{\poolChannelsB}{ReasonIR, query2doc with BM25 feedback ($\times$0.5), dense document vectors ($\times$0.5), query2doc ($\times$0.5), dense ($\times$0.5)}
 \newcommand{\rBgeA}{.215}
 \newcommand{\rBgeB}{.275}
 \newcommand{\rBgePoolA}{.277}

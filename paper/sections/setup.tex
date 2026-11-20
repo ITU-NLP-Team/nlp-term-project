@@ -2,33 +2,50 @@
 \label{sec:setup}
 
 \paragraph{Data and protocol.} We use the latest RETECO release (v1.1, deduplicated Track~1
-corpora) for all 13 domains, without sub-sampling: 1{,}211 train and 519 dev queries (1a) and
+corpora) for all 13 domains, without sub-sampling: 1{,}211 train and 519 dev questions (1a) and
 2{,}762 train and 1{,}214 dev steps (1b) over 1.17M documents (2.41M passages). Every choice
-that is not fixed a priori---RM3~$\alpha$, prior weight~$\lambda$, the pool's channels, pure
-vs.\ fused reranking, the final configuration---is selected on \textbf{train}; dev is only
-evaluated, and pool channels and the final reranker are selected separately for 1a and 1b.
-The 4B cross-decoder was run on train and dev 1a (on the BM25 $\oplus$ dense candidates and on
-the selected pool) and on 12 of the 13 dev domains of 1b; within our GPU allocation it could
-not also be run on the 2{,}762 train steps and the 636 dev steps of \emph{history}, so it is a
-candidate for 1a only, and its 1b column is left empty. Guidance is used only to build the planner's demonstration (train) and for
+that is not fixed a priori---the pool's channels and weights, the reranker, RM3~$\alpha$ and the
+prior weights of the ablations---is made on \textbf{train}, separately for 1a and 1b; dev is only
+evaluated. Released guidance is used only to build the expansion prompt's demonstration (train) and for
 post-hoc analysis (dev). Scoring follows the official protocol: \texttt{pytrec\_eval}
-\texttt{ndcg\_cut\_10} \citep{vangysel2018pytreceval} per topic, topics missing from a run
-count as zero, mean per domain, macro mean over domains; we also report recall@100.
-Significance is a two-sided paired randomisation test over topics pooled across domains
-(10{,}000 permutations, \citealp{smucker2007significance}).
+\texttt{ndcg\_cut\_10} \citep{vangysel2018pytreceval} per topic, topics missing from a run count
+as zero, mean per domain, macro mean over domains; we also report recall@100. Significance is a
+two-sided paired randomisation test over topics pooled across domains (10{,}000 permutations,
+\citealp{smucker2007significance}). The official baseline is document-level Lucene BM25 with
+the same $k_1$ and $b$ as ours.
 
-\paragraph{Baselines.} The official baseline is document-level Lucene BM25 (Pyserini analyser,
-$k_1{=}0.9$, $b{=}0.4$). Our first row uses the same BM25 parameters on passages with MaxP.
+\paragraph{Models.} All models are open-weight and none is fine-tuned on RETECO:
+Qwen3-Embedding-0.6B (fp16, 384 tokens) and ReasonIR-8B (bf16, 512 tokens for passages, 1{,}024
+for queries) as retrievers; Qwen3-8B and Qwen3-1.7B as generators (bf16, greedy,
+non-thinking mode, served offline with vLLM~0.8.5); MiniLM-L12 (512 tokens), BGE-reranker-v2-m3,
+Qwen3-Reranker-0.6B and -4B (1{,}024 tokens) as rerankers.
 
-\paragraph{Models.} Dense: Qwen3-Embedding-0.6B (fp16, 384 tokens). Cross-encoders:
-\texttt{ms-marco-MiniLM-L12-v2} (512 tokens) and \texttt{bge-reranker-v2-m3} (1{,}024).
-Cross-decoders: Qwen3-Reranker-0.6B and -4B (bf16, 1{,}024). Reasoning-trained retriever:
-ReasonIR-8B (bf16, 512 tokens for passages, 1{,}024 for queries). Generators: Qwen3-8B
-(planner, neighbouring events, reasoning) and Qwen3-1.7B (metadata), bf16, non-thinking,
-greedy decoding, served offline with vLLM~0.8.5. All models are open-weight; no model is
-fine-tuned on RETECO.
+\paragraph{Compute.} All GPU work ran on the UHeM Altay cluster of Istanbul Technical University,
+on nodes with four NVIDIA A100 80\,GB GPUs and 64 CPU cores, scheduled with SLURM;
+Table~\ref{tab:compute} lists the cost of each stage. Indexes, vectors, models and caches take
+93\,GB of storage in total. Within our allocation, the 4B reranker was run on train and dev 1a
+and on 12 of the 13 dev domains of 1b, but not on the 2{,}762 train steps, so it is a candidate
+for 1a only. The code also runs end to end on a CPU-only laptop (8\,GB RAM) with smaller
+models, which we used for development.
 
-\paragraph{Compute.} Indexing and all GPU stages ran on the UHeM Altay cluster (NVIDIA A100
-80GB; one to four GPUs per job). Data, indexes, vectors, models and caches take 93\,GB in total. \computenote{} The pipeline also runs end to
-end on a CPU-only laptop (8~GB RAM) with BM25, \texttt{bge-small}, MiniLM and a 1.5B GGUF
-generator, which we used for development.
+\begin{table}[t]
+\centering
+\small
+\setlength{\tabcolsep}{3pt}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{llr}
+\toprule
+\textbf{Stage} & \textbf{Model} & \textbf{Cost} \\
+\midrule
+Embed 2.41M passages & Qwen3-Emb.-0.6B & 3.5 GPU-h \\
+Embed 2.41M passages & ReasonIR-8B & 20 GPU-h \\
+Metadata, 1.17M docs & Qwen3-1.7B & 11 GPU-h \\
+Expansions, 1{,}730 questions & Qwen3-8B & 9 min / pass \\
+Rerank 100 candidates & Qwen3-Rer.-0.6B & 1.05 s / topic \\
+Rerank 100 candidates & Qwen3-Rer.-4B & 3.8 s / topic \\
+\bottomrule
+\end{tabular}}
+\caption{Compute per stage on NVIDIA A100 80\,GB GPUs (GPU-h: A100-hours). BM25 indexing,
+fusion and evaluation run on CPU.}
+\label{tab:compute}
+\end{table}

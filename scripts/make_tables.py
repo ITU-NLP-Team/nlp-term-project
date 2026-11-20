@@ -41,16 +41,50 @@ OFFICIAL_DEV = {  # starter_kit/BASELINE_RESULTS.md (v1.1), 1a dev / 1b dev
     "workplace": (0.0230, 0.0297),
 }
 GROUP_TITLES = {
-    "lexical": "Lexical and pseudo-relevance feedback",
-    "temporal": "Temporal metadata (prior, year index, KG)",
-    "dense": "Dense retrieval (Qwen3-Emb.-0.6B, ReasonIR-8B) and RAPTOR trees",
-    "llm": "LLM query planning (Qwen3-8B)",
-    "meta": "Small-LLM metadata (Qwen3-1.7B) and neighbouring events (Qwen3-8B)",
+    "lexical": "Lexical",
+    "time": "Time matching (ablation, not in the final system)",
+    "dense": "Dense and reasoning-trained retrieval",
+    "llm": "LLM query expansion",
     "pool": "Train-selected hybrid pool",
-    "rerank": r"Pointwise reranking of the BM25 $\oplus$ dense top-100",
-    "final": r"Final fusion: pool $\oplus$ reranked candidates",
+    "rerank": r"Rerankers on the BM25 $\oplus$ dense top-100",
+    "final": r"Rerankers on the pool's top-100, fused with the pool (final)",
 }
 GROUP_ORDER = list(GROUP_TITLES)
+# Systems reported in the paper's full table: (id, group, label). Other cached systems
+# (RAPTOR trees, temporal PRF, year-token weighting, late fusion, ...) are left out.
+PAPER_ROWS = [
+    ("bm25", "lexical", "BM25, passages + MaxP"),
+    ("bm25_full", "lexical", "BM25, 1b input = full question + step"),
+    ("rm3", "lexical", "BM25 + RM3"),
+    ("prior_exp", "time", "BM25 + year prior (rule-based years)"),
+    ("bm25+timefilter", "time", r"BM25 $\oplus$ year-filtered BM25"),
+    ("bm25+kg", "time", r"BM25 $\oplus$ temporal knowledge graph"),
+    ("meta_tf_bm25", "time", "BM25, LLM-period filter"),
+    ("meta_tf_dense", "time", "Dense, LLM-period filter"),
+    ("meta_prior", "time", r"BM25 $\oplus$ dense + LLM-period prior"),
+    ("dense", "dense", "Dense, Qwen3-Embedding-0.6B (passages)"),
+    ("dense_doc", "dense", "Dense, document vectors"),
+    ("bm25+dense", "dense", r"BM25 $\oplus$ dense"),
+    ("rir", "dense", "ReasonIR-8B (passages)"),
+    ("rir_reason", "dense", "ReasonIR-8B + LLM reasoning"),
+    ("llm_kw_fb", "llm", "BM25 + LLM keywords (with BM25 feedback)"),
+    ("llm_q2d", "llm", "BM25 + LLM pseudo answer (query2doc)"),
+    ("llm_q2d_fb", "llm", "query2doc with BM25 feedback"),
+    ("llm_multi", "llm", "LLM sub-queries + event chain"),
+    ("meta_kw", "llm", "BM25 + small-LLM query metadata"),
+    ("meta_field", "llm", "BM25 over small-LLM document metadata"),
+    ("nbr_bm25", "llm", "Neighbouring events (BM25)"),
+    ("nbr_hybrid", "llm", r"Neighbouring events (BM25 $\oplus$ dense)"),
+    ("pool_sel", "pool", "Train-selected pool (weighted RRF)"),
+    ("ce_minilm", "rerank", r"$\rightarrow$ MiniLM-L12 (cross-encoder)"),
+    ("ce_bge", "rerank", r"$\rightarrow$ BGE-reranker-v2-m3 (cross-encoder)"),
+    ("q3rr06", "rerank", r"$\rightarrow$ Qwen3-Reranker-0.6B (cross-decoder)"),
+    ("q3rr4", "rerank", r"$\rightarrow$ Qwen3-Reranker-4B (cross-decoder)"),
+    ("sel_ce_bge", "final", "BGE-reranker-v2-m3"),
+    ("sel_q3rr06", "final", "Qwen3-Reranker-0.6B"),
+    ("sel_q3rr4", "final", "Qwen3-Reranker-4B"),
+    ("chronofuse", "final", r"\textbf{\sys} (train-selected reranker)"),
+]
 # TEMPO leaderboard (Abdallah et al., 2026; tempo-bench.github.io), nDCG@10 x100 over all 1,730
 # questions (Task 1) and the 3,976 steps in the Query+Step setting (Task 2).
 TEMPO_BOARD = [
@@ -91,10 +125,9 @@ def fmt(v, p=None, best=False):
 
 def full_table(dev: dict) -> str:
     a, b = dev["1a"], dev["1b"]
-    ids = [k for k in a if isinstance(a[k], dict) and "group" in a[k]]
-    ids += [k for k in b if k not in ids and isinstance(b[k], dict) and "group" in b[k]]
-    grp = {k: (a.get(k) or b.get(k))["group"] for k in ids}
-    ids.sort(key=lambda k: GROUP_ORDER.index(grp[k]) if grp[k] in GROUP_ORDER else 99)
+    rows_def = [(k, g, lab) for k, g, lab in PAPER_ROWS if k in a or k in b]
+    ids = [k for k, _, _ in rows_def]
+    meta = {k: (g, lab) for k, g, lab in rows_def}
     best_a = max(a[k]["macro"] for k in ids if k in a)
     best_b = max(b[k]["macro"] for k in ids if k in b)
     rows = [
@@ -114,9 +147,8 @@ def full_table(dev: dict) -> str:
     group = None
     for k in ids:
         ra, rb = a.get(k), b.get(k)
-        r0 = ra or rb
-        if r0["group"] != group:
-            group = r0["group"]
+        if meta[k][0] != group:
+            group = meta[k][0]
             rows.append(r"\midrule")
             rows.append(
                 rf"\multicolumn{{6}}{{l}}{{\textit{{{GROUP_TITLES.get(group, group)}}}}} \\"
@@ -135,15 +167,15 @@ def full_table(dev: dict) -> str:
                     fmt(r["macro"], r.get("p_vs_bm25"), r["macro"] == best),
                     fmt(r["recall100"]),
                 ]
-        rows.append(rf"& {esc(r0['label'])}{extra} & " + " & ".join(cells) + r" \\")
+        rows.append(rf"& {meta[k][1]}{extra} & " + " & ".join(cells) + r" \\")
     rows += [
         r"\bottomrule",
         r"\end{tabular}",
         r"\caption{Macro nDCG@10 and recall@100 on the RETECO Track~1 \textbf{dev} split "
-        r"(13 domains, v1.1). Hyper-parameters, the pool composition and the final "
-        r"configuration were selected on \textbf{train}. $^{\dagger}$: different from our "
-        r"passage BM25 at $p<0.05$ (paired randomisation test over queries/steps). "
-        r"$\oplus$: reciprocal rank fusion.}",
+        r"(13 domains, v1.1). Hyper-parameters, the pool composition and the reranker were "
+        r"selected on \textbf{train}. $^{\dagger}$: different from our passage BM25 at "
+        r"$p<0.05$ (paired randomisation test over queries/steps). $\oplus$: reciprocal rank "
+        r"fusion. --: not run (the 4B reranker on 1b, see \S\ref{sec:setup}).}",
         r"\label{tab:full}",
         r"\end{table*}",
     ]
@@ -162,6 +194,7 @@ def main_table(dev: dict, train: dict | None) -> str:
         r"\begin{table}[t]",
         r"\centering",
         r"\small",
+        r"\setlength{\tabcolsep}{4pt}",
         r"\begin{tabular}{lcccc}",
         r"\toprule",
         r" & \multicolumn{2}{c}{\textbf{1a}} & \multicolumn{2}{c}{\textbf{1b}} \\",
@@ -472,12 +505,12 @@ def numbers_tex(dev: dict, train: dict | None, sel: dict, analysis: dict) -> str
         "dense": "dense",
         "dense_doc": "dense document vectors",
         "bm25": "BM25",
-        "llm_q2d_fb": "LLM-PRF query2doc",
-        "llm_q2d": "LLM query2doc",
-        "llm_multi": "LLM multi-query",
-        "llm_multi_fb": "LLM-PRF multi-query",
+        "llm_q2d_fb": "query2doc with BM25 feedback",
+        "llm_q2d": "query2doc",
+        "llm_multi": "LLM sub-queries",
+        "llm_multi_fb": "LLM sub-queries with BM25 feedback",
         "llm_kw": "LLM keywords",
-        "llm_kw_fb": "LLM-PRF keywords",
+        "llm_kw_fb": "LLM keywords with BM25 feedback",
         "raptor_t": "temporal RAPTOR",
         "raptor": "RAPTOR",
         "kg": "temporal KG",
@@ -486,8 +519,8 @@ def numbers_tex(dev: dict, train: dict | None, sel: dict, analysis: dict) -> str
         "nbr_hybrid": "neighbouring events",
         "nbr_bm25": "neighbouring events (BM25)",
         "rir": "ReasonIR",
-        "rir_reason": "ReasonIR + reasoning",
-        "meta_field": "metadata field index",
+        "rir_reason": "ReasonIR with LLM reasoning",
+        "meta_field": "metadata index",
         "meta_kw": "metadata keywords",
         "meta_tf_dense": "period-filtered dense",
         "meta_tf_bm25": "period-filtered BM25",
@@ -667,16 +700,6 @@ def main() -> None:
         ("pool_sel", "Hybrid pool"),
     ):
         ours.append((lab, pooled(trq_v2, perq, "1a", sid), pooled(trq_v2, perq, "1b", sid)))
-    t1 = pq1.get("bench_train_perquery_v1.json", {})
-    dv1 = pq1.get("bench_dev_perquery_v1.json", {})
-    if t1 and dv1:
-        ours.append(
-            (
-                r"\sys v1 (no metadata / ReasonIR)",
-                pooled(t1, dv1, "1a", "chronofuse"),
-                pooled(t1, dv1, "1b", "chronofuse"),
-            )
-        )
     ours.append(
         (
             r"\textbf{\sys (final)}",

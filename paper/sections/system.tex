@@ -1,213 +1,154 @@
-\section{System Overview}
+\section{System}
 \label{sec:system}
 
 \begin{figure*}[t]
   \centering
   \resizebox{\textwidth}{!}{%
   \begin{tikzpicture}[
-      node distance=3mm and 4mm,
+      node distance=3mm and 5mm,
       box/.style={draw, rounded corners=2pt, align=center, font=\scriptsize,
-                  minimum height=7mm, inner sep=2pt, fill=#1},
+                  minimum height=8mm, inner sep=3pt, fill=#1},
       box/.default=white,
       lab/.style={font=\scriptsize\itshape, text=black!60},
       arr/.style={-{Latex[length=1.6mm]}, thick, black!70}]
     % ---------------- offline
-    \node[box=gray!10, minimum width=17mm] (corpus) {domain corpus\\(1.17M docs)};
-    \node[box=blue!8, right=of corpus, yshift=9mm, minimum width=24mm] (chunk)
-      {200-word passages\\+ contextual title};
-    \node[box=blue!8, right=of corpus, yshift=-9mm, minimum width=24mm] (meta)
-      {temporal profile + LLM\\metadata (Qwen3-1.7B)};
-    \node[box=blue!15, right=of chunk, yshift=6mm, minimum width=21mm] (bm25) {BM25 index};
-    \node[box=blue!15, right=of chunk, yshift=-3mm, minimum width=21mm] (dense)
-      {dense indexes\\(Qwen3-Emb.,\\ReasonIR-8B)};
-    \node[box=blue!15, right=of meta, yshift=3mm, minimum width=21mm] (year)
-      {year index, period\\filter, metadata index};
-    \node[box=blue!15, below=1.5mm of year, minimum width=21mm] (kg) {temporal KG};
-    \node[box=blue!15, below=1.5mm of kg, minimum width=21mm] (tree) {temporal RAPTOR};
+    \node[box=gray!10, minimum width=18mm] (corpus) {domain corpus\\(1.17M documents)};
+    \node[box=blue!8, right=of corpus, yshift=7mm, minimum width=26mm] (chunk)
+      {200-word passages\\(2.41M, MaxP)};
+    \node[box=blue!8, right=of corpus, yshift=-12mm, minimum width=26mm] (meta)
+      {Qwen3-1.7B metadata:\\period, events, entities};
+    \node[box=blue!15, right=of chunk, yshift=7mm, minimum width=24mm] (bm25) {BM25};
+    \node[box=blue!15, below=1.5mm of bm25, minimum width=24mm] (dense)
+      {Qwen3-Embedding-0.6B};
+    \node[box=blue!15, below=1.5mm of dense, minimum width=24mm] (rir) {ReasonIR-8B};
+    \node[box=blue!15, below=1.5mm of rir, minimum width=24mm] (mindex) {metadata index};
     \draw[arr] (corpus) -- (chunk); \draw[arr] (corpus) -- (meta);
-    \draw[arr] (chunk) -- (bm25); \draw[arr] (chunk) -- (dense);
-    \draw[arr] (meta) -- (year); \draw[arr] (meta.east) -- (kg.west);
-    \draw[arr] (dense.east) to[out=-20,in=20] (tree.east);
-    \draw[arr] (meta.south) |- (tree.west);
+    \draw[arr] (chunk.east) -- (bm25.west); \draw[arr] (chunk.east) -- (dense.west);
+    \draw[arr] (chunk.east) -- (rir.west); \draw[arr] (meta.east) -- (mindex.west);
     \node[lab, above=0.5mm of chunk] {offline, per domain};
     % ---------------- online
-    \node[box=gray!10, right=12mm of bm25, minimum width=17mm] (q) {query /\\step};
-    \node[box=orange!15, below=4mm of q, minimum width=22mm] (plan)
-      {LLM planner, neigh-\\bouring events,\\reasoning (Qwen3-8B)};
+    \node[box=gray!10, right=14mm of bm25, minimum width=16mm] (q) {question\\or step};
+    \node[box=orange!15, below=5mm of q, minimum width=30mm] (llm)
+      {Qwen3-8B (+ top-5 BM25):\\pseudo answer, sub-queries,\\neighbouring events,
+       reasoning};
     \node[lab, above=0.5mm of q] {online};
-    \node[box=orange!8, right=6mm of q, minimum width=32mm, yshift=-1mm] (chan)
-      {22 first-stage channels:\\BM25, RM3, dense, ReasonIR,\\RAPTOR, KG, period filters,\\
-       metadata, LLM keywords /\\query2doc / multi-query,\\neighbouring events};
-    \node[box=green!12, right=of chan, minimum width=20mm] (pool)
-      {selected pool\\(weighted RRF,\\chosen on train)};
-    \node[box=green!20, right=of pool, yshift=9mm, minimum width=26mm] (point)
-      {pointwise rerank of\\the top-100: cross-\\encoder or cross-decoder};
-    \node[box=green!28, right=of pool, xshift=30mm, minimum width=14mm] (fin) {RRF};
+    \node[box=orange!8, right=8mm of q, yshift=-6mm, minimum width=30mm] (chan)
+      {first-stage channels\\(BM25, dense, ReasonIR\\with the expanded queries)};
+    \node[box=green!12, right=of chan, minimum width=22mm] (pool)
+      {pool: weighted RRF\\of channels chosen\\on train};
+    \node[box=green!20, right=of pool, minimum width=26mm] (rr)
+      {Qwen3-Reranker\\scores the top-100};
+    \node[box=green!28, right=of rr, minimum width=12mm] (fin) {RRF};
     \node[box=gray!10, right=of fin, minimum width=10mm] (out) {top-10};
-    \draw[arr] (q) -- (plan);
-    \draw[arr] (q.east) -- (chan.west |- q.east);
-    \draw[arr] (plan.east) -- (chan.west |- plan.east);
-    \draw[arr] (chan) -- (pool); \draw[arr] (pool.north) |- (point.west);
-    \draw[arr] (point.east) -| (fin.north);
-    \draw[arr] (pool) -- (fin); \draw[arr] (fin) -- (out);
+    \draw[arr] (q) -- (llm);
+    \draw[arr] (q.east) -- (chan.north west);
+    \draw[arr] (llm.east) -- (chan.south west);
+    \draw[arr] (chan) -- (pool); \draw[arr] (pool) -- (rr); \draw[arr] (rr) -- (fin);
+    \draw[arr] (pool.south) -- ++(0,-5mm) -| (fin.south);
+    \draw[arr] (fin) -- (out);
     \draw[arr, dashed] (bm25.east) -- (q.west);
-    \draw[arr, dashed] (bm25.south east) to[out=-30,in=180] (plan.west);
-    \node[lab, below=1.6mm of plan, align=center] {LLM-PRF: top-5 BM25 snippets};
+    \draw[arr, dashed] (mindex.east) -| (chan.south);
   \end{tikzpicture}}
-  \caption{\sys. Offline, every domain is chunked, indexed lexically and with two dense
-  encoders, and annotated with rule-based and LLM-extracted temporal metadata that feeds a
-  year index, period filters, a metadata index, a temporal knowledge graph and a temporal
-  RAPTOR tree. Online, an LLM (optionally conditioned on BM25 feedback) produces keywords, a
-  pseudo answer, sub-queries, an event chain, neighbouring events and free-text reasoning.
-  Channels are fused into a pool chosen on train; a reranker (chosen on train) scores its
-  top-100, and its ranking is fused with the pool to produce the final top-10.}
+  \caption{\sys. Offline, every document is split into passages, indexed with BM25 and two
+  dense encoders, and summarised by a small LLM into a metadata record. Online, Qwen3-8B
+  expands the question (given the top BM25 results); the expanded queries run through the
+  indexes, a train-selected subset of these channels is fused into a pool, and a decoder
+  reranker scores the pool's top-100, which is fused with the pool into the final top-10.}
   \label{fig:overview}
 \end{figure*}
 
-Figure~\ref{fig:overview} summarises \sys. Every component runs per domain and is cached as a
-\emph{stage}; systems are recipes over cached stages, so all variants in
-Table~\ref{tab:full} are evaluated on identical candidate sets.
+Figure~\ref{fig:overview} summarises \sys. It has three parts: indexes built once per domain
+(\S\ref{sec:indexes}), first-stage channels that combine those indexes with LLM-expanded
+queries (\S\ref{sec:channels}), and a train-selected pool reranked by a decoder LLM
+(\S\ref{sec:pool}). Every component runs per domain and is cached, so all variants in
+Table~\ref{tab:full} are evaluated on identical candidates.
 
-\subsection{Passages and Metadata}
-\label{sec:metadata}
-TEMPO documents range from a sentence to multi-megabyte dumps. We split every document into
-200-word passages with a 40-word overlap (at most 64 per document) and score documents with
-MaxP, the maximum over their passages \citep{dai2019maxp}. For the dense index, passages after
-the first are prefixed with the document's proxy title (``contextual chunking''), so that
-they keep the topic of their document.
+\subsection{Indexes}
+\label{sec:indexes}
+\paragraph{Passages.} TEMPO documents range from a sentence to multi-megabyte dumps. We split
+every document into 200-word passages with a 40-word overlap (at most 64 per document; 2.41M
+passages in total) and score a document by its best passage (MaxP, \citealp{dai2019maxp}).
+Passages after the first are prefixed with the document's title, so that they keep its topic.
 
-For every document a rule-based extractor builds a \emph{temporal profile}: explicit years,
-year ranges, month--year and ISO dates, decades and centuries are normalised to a set of years
-with a granularity label, and relative expressions (``two weeks ago'', ``no longer'') are kept
-as surface forms. The profile is stored with a proxy title, an extractive description and
-salient capitalised entities. Over the 1.17M documents, \pctdocyear{} carry at least one year
-(Table~\ref{tab:data}).
+\paragraph{BM25.} Lucene BM25 with the official parameters ($k_1{=}0.9$, $b{=}0.4$) over
+passages, built with \texttt{bm25s} and a streaming index builder that reproduces its scores
+exactly and fits the largest domain (\emph{history}, 200k documents) in memory.
 
-Rules only see explicit dates. A \textbf{small LLM} (Qwen3-1.7B, guided JSON decoding) therefore
-reads the opening of every document (220 words, at most 1{,}600 characters) and returns the
-period the text is \emph{about}, including implicit periods (``after the 2008 crisis''), up to
-five events, six entities, six keywords and a subtopic. The same prompt is applied to every
-question, so documents and queries share one schema. The 1.17M documents are processed in
-10k-document shards spread over GPUs (2.8 hours on four A100s).
+\paragraph{Dense.} All passages are embedded with Qwen3-Embedding-0.6B
+\citep{zhang2025qwen3emb} and, separately, with ReasonIR-8B \citep{shao2025reasonir}, a
+Llama-3.1-8B encoder trained for reasoning-intensive retrieval. Search is exact (inner product
+on GPU) followed by MaxP; for Qwen3-Embedding we also keep document vectors (the mean of a
+document's passage vectors).
 
-\subsection{First-Stage Channels}
+\paragraph{LLM metadata.} A small LLM (Qwen3-1.7B, \citealp{yang2025qwen3}) reads the opening of
+every document (220 words, at most 1{,}600 characters) and returns, as JSON, the period the text
+is \emph{about}---including implicit periods such as ``after the 2008 crisis''---up to five
+events, six entities, six keywords and a subtopic. The events, entities, keywords and title of
+each document form a short text that is indexed with BM25 at document level (the
+\emph{metadata index}). The same prompt is applied to every question, so questions and
+documents share one schema.
+
+\subsection{Query Expansion and Channels}
 \label{sec:channels}
-\paragraph{Lexical.} Lucene BM25 ($k_1{=}0.9$, $b{=}0.4$, as in the official baseline) over
-passages, using \texttt{bm25s} with a memory-lean streaming index builder that reproduces its
-scores exactly. A weighted-query scorer adds three variants: \textbf{RM3} pseudo-relevance
-feedback \citep{lavrenko2001relevance,abduljaleel2004umass} with 10 feedback documents and 20
-expansion terms, interpolation $\alpha$ selected on train; and two \textbf{year-token
-down-weighting} variants that scale year tokens in the query by 0.5 or 0.
+All expansions come from Qwen3-8B \citep{yang2025qwen3} in non-thinking mode with greedy,
+JSON-schema-guided decoding. Following LLM-based pseudo-relevance feedback, the prompts can
+include the first 60 words of the top-5 BM25 documents, so that the model reuses the
+vocabulary, names and dates the collection actually uses. Each expansion becomes a
+\emph{channel}, a ranked list of 100 documents:
 
-\paragraph{Temporal structures.} Three structures expose the temporal profiles to retrieval.
-(i)~A \textbf{year index} (an inverted index from years to documents) turns ``BM25 restricted
-to the query's period'' into a passage mask; the masked BM25 run is a channel of its own.
-(ii)~A \textbf{temporal knowledge graph} with document, entity and year nodes and
-\textsc{Mentions}, \textsc{RefersTo} and \textsc{ActiveIn} edges is searched by personalised
-PageRank seeded with the query's entities and years. (iii)~A \textbf{temporal prior}
-interpolates the min--max normalised score with the fraction of the query's years matched by
-the document ($\pm1$ year), $s'(d){=}(1{-}\lambda)\hat s(d){+}\lambda T(q,d)$, with
-$\lambda$ selected on train. For queries without explicit dates, \textbf{temporal PRF} infers
-a year window from the BM25 feedback set: each of the top-20 documents spreads a
-rank-discounted weight over its years, weights are contrasted with the corpus year prior, and
-the window grows around the best year while neighbours keep half of its score
-\citep[cf.][]{jones2007temporal}.
+\begin{itemize}
+  \setlength\itemsep{1pt}
+  \item \textbf{query2doc}: BM25 with the question plus a 60--90-word hypothetical answer and
+        8--15 keywords \citep{wang2023query2doc}, with or without BM25 feedback. A single
+        demonstration, built from one train question of the same domain (its released
+        guidance and its first gold document), shows the model the expected answer style.
+  \item \textbf{Sub-queries}: the same prompt also returns three sub-queries and a
+        chronological event chain; one BM25 run per sub-query and per event is fused with RRF, the
+        question weighted twice \citep{rackauckas2024ragfusion}.
+  \item \textbf{Neighbouring events}: relevant evidence often describes events \emph{around}
+        the one a question names. A second prompt (with BM25 feedback) asks for 4--6 such
+        events---causes, earlier, parallel and later events, each with a year---four
+        period-anchored sub-queries and ten expansion terms. BM25 and Qwen3-Embedding runs for
+        the question (weight 2), for every sub-query and for every event are fused with RRF.
+  \item \textbf{ReasonIR}: the full question (for a step: question and step), and a second
+        variant that appends Qwen3-8B's free-text reasoning about the question, as done with
+        GPT-4o on TEMPO \citep{abdallah2026tempo}.
+  \item \textbf{Dense} (Qwen3-Embedding, passages and document vectors) and the
+        \textbf{metadata index}, queried with the question and its own small-LLM metadata.
+\end{itemize}
 
-\paragraph{Dense.} All 2.41M passages are embedded with Qwen3-Embedding-0.6B
-\citep{zhang2025qwen3emb} (instruction-prompted queries, cosine similarity, exact search on
-GPU) and aggregated with MaxP; a document-vector variant averages a document's passage vectors.
+\subsection{Pool and Reranking}
+\label{sec:pool}
+\paragraph{Pool.} Channels are combined with weighted reciprocal rank fusion
+\citep{cormack2009rrf}, $s(d){=}\sum_c w_c/(60{+}\mathrm{rank}_c(d))$. Which channels enter, and
+with which weight, is decided on the \emph{train} split by greedy forward selection: starting
+from the best single channel, the (channel, $w\in\{1,\tfrac12\}$) pair that most improves train
+macro nDCG@10 is added until no addition helps. Selection is run separately for 1a and 1b, over
+all channels of Table~\ref{tab:full}.
 
-\paragraph{Temporal RAPTOR.} RAPTOR \citep{sarthi2024raptor} clusters chunks recursively and
-summarises each cluster with an LLM; retrieval over the \emph{collapsed tree} (all levels at
-once) worked best in its study. A RAPTOR baseline in our earlier RAG benchmark, which clustered
-with $k$-means and summarised with an LLM, motivated three changes for a 1.17M-document,
-ranking-oriented setting. First, level-1 clusters are formed on
-$[\mathbf{e}_d;\,\beta\,\mathbf{y}_d]$, where $\mathbf{y}_d$ is a Gaussian-smoothed histogram of
-the document's years over 5-year bins, so a node groups documents on the same topic \emph{and}
-period; each node stores its members' year span. Second, nodes are represented by the
-normalised centroid of their members instead of an LLM summary, which would require
-$\sim$10$^5$ generations. Third, collapsed-tree hits are mapped back to documents: a document's
-score is its own similarity smoothed with its ancestors' (cluster-based score regularisation,
-\citealp{liu2004cluster,kurland2004corpus}), children of the 10 best nodes join the candidate
-set, and nodes whose span matches the query window receive a bonus. We use two levels with
-$\sim$10 children per node, $\beta{=}0.5$, and compare against the same tree without time
-($\beta{=}0$, no bonus).
+\paragraph{Reranking.} The pool's top-100 is reranked pointwise and the reranked list is fused
+with the pool by equal-weight RRF. Each candidate is shown as ``[first--last year] title $|$
+best passage'', the best passage being the document's highest-scoring BM25 passage for the
+question. We compare encoder \emph{cross-encoders}---MiniLM-L12 trained on MS~MARCO
+\citep{wang2020minilm,nogueira2019passage} and BGE-reranker-v2-m3 \citep{chen2024bgem3}---with
+decoder LLM rerankers, \emph{cross-decoders}: Qwen3-Reranker 0.6B and 4B \citep{zhang2025qwen3emb},
+which read an instruction, the question and the document and score $P(\textit{yes})$ at the
+answer position \citep[cf.][]{nogueira2020monot5}. Their instruction states RETECO's notion of
+relevance (``evidence that helps answer it, including information about the relevant events and
+time period''). The reranker is the one with the best train score for the sub-track;
+reranking the BM25 $\oplus$ dense candidates instead of the pool's scored lower on train for the
+selected rerankers.
 
-\paragraph{LLM query planning.} An LLM (Qwen3-8B, non-thinking mode,
-\citealp{yang2025qwen3}) receives the question and returns a JSON plan: the temporal intent,
-a year window, a chronological \emph{event chain} the answer depends on (each event with an
-optional year), 8--15 expansion keywords, three sub-queries, and a 60--90-word hypothetical
-answer. The single demonstration is \emph{distilled from train-split supervision} of the same
-domain: TEMPO's guidance supplies the intent, events and sub-queries (its retrieval plan), and
-the question's first gold document supplies the hypothetical answer and keywords, so the model
-imitates the benchmark's annotation style and learns to write \emph{content} rather than a
-description of the information need. Outputs are constrained to the plan's JSON schema with
-guided decoding. Guidance and labels of evaluated queries are never used. In the \textbf{LLM-PRF} variant the prompt additionally
-contains the first 60 words of the top-5 BM25 documents, letting the model lift vocabulary,
-names and dates that the collection actually uses---an LLM analogue of RM3. Each plan yields
-three BM25 channels: \textbf{keywords} (query + keywords), \textbf{query2doc} (query + pseudo
-answer + keywords, \citealp{wang2023query2doc}) and \textbf{multi-query + event chain} (one BM25
-run per sub-query and per event, fused with RRF, original query weighted twice;
-\citealp{rackauckas2024ragfusion}).
+\paragraph{Sub-track 1b.} A step is retrieved with ``title + step instruction'' (ReasonIR: full
+question + step). The expansions, metadata and reasoning of the parent question are shared by
+all of its steps.
 
-\paragraph{Neighbouring events.} Relevant evidence often describes events \emph{around} the
-one a question names: its causes, what preceded or followed it, parallel developments. A
-second prompt to Qwen3-8B, again with the top-5 BM25 snippets, asks for 4--6 such
-\emph{neighbouring events} (each with a year and a relation: cause, before, same time, after,
-effect), four period-anchored sub-queries and ten expansion terms. \textbf{nbr-BM25} fuses
-BM25 runs for the question (weight 2), the question with the expansion terms, every sub-query
-and every neighbouring event; \textbf{nbr-hybrid} adds the dense run of the question (weight 2)
-and a dense run for every sub-query and event.
-
-\paragraph{LLM metadata channels.} The small-LLM records support four channels:
-\textbf{metadata keywords} (BM25 with the question's events, entities and keywords added),
-a \textbf{metadata index} (document-level BM25 over title, events, entities, keywords and
-subtopic), and \textbf{period-filtered} BM25 and dense retrieval, which keep documents whose
-LLM period overlaps the question's ($\pm2$ years; undated documents are kept). A
-\textbf{period prior} re-scores BM25 $\oplus$ dense with
-$P(q,d){=}1/(1{+}\mathrm{gap}/2)$ (0.5 for undated documents), with $\lambda$ chosen on train.
-
-\paragraph{Reasoning-trained retrieval.} ReasonIR-8B \citep{shao2025reasonir}, a bidirectional
-Llama-3.1-8B encoder trained for reasoning-intensive retrieval, embeds all 2.41M passages
-(512 tokens; the same contextual passages as above) and is searched exactly with MaxP. Its
-query is the full question (1b: question and step, as in TEMPO's \emph{Query+Step} setting).
-On TEMPO, ReasonIR gains most when the query is extended with an LLM's reasoning
-\citep{abdallah2026tempo}; \textbf{ReasonIR + reasoning} appends Qwen3-8B's answer to a
-BRIGHT-style prompt \citep{su2025bright} (identify the problem and period, reason about what
-relevant documents contain, draft an answer; at most 350 words).
-
-\subsection{Hybrid Pool}
-Channels are combined with weighted reciprocal rank fusion \citep{cormack2009rrf},
-$s(d){=}\sum_c w_c/(60{+}\mathrm{rank}_c(d))$. Which channels enter the pool, and with which
-weight, is decided by greedy forward selection on the \emph{train} split: starting from the
-best single channel, the (channel, $w\in\{1,\tfrac12\}$) pair that most improves train macro
-nDCG@10 is added until no addition helps. Selection is run separately for 1a and 1b.
-
-\subsection{Reranking}
-\label{sec:rerank}
-Each candidate is rendered as ``[first--last year] title $|$ best passage'', where the best
-passage is the document's highest-scoring BM25 passage for the query, so that the reranker sees
-the temporal metadata explicitly. Steps (1b) are rendered as ``title, Step: instruction''.
-
-\paragraph{Cross-encoders vs.\ cross-decoders.} We compare two families on one fixed
-candidate set, the top-100 of BM25 $\oplus$ dense. \emph{Cross-encoders} (encoder-only):
-MiniLM-L12 trained on MS~MARCO \citep{wang2020minilm,nogueira2019passage} and
-BGE-reranker-v2-m3 \citep{chen2024bgem3}. \emph{Cross-decoders} (decoder-only LLM rerankers):
-Qwen3-Reranker 0.6B and 4B \citep{zhang2025qwen3emb}, which read an instruction, the query and
-the document and score $P(\textit{yes})$ at the answer position, in the spirit of monoT5
-\citep{nogueira2020monot5}. Their instruction states RETECO's notion of relevance (``evidence
-that helps answer it, including information about the relevant events and time period'').
-Each reranked list is evaluated alone and fused with its candidate set by RRF.
-
-\paragraph{Final fusion.} Two ways of combining a reranker with the train-selected pool are
-candidates. \emph{Late fusion} reuses the reranking of the fixed BM25 $\oplus$ dense top-100
-and fuses it with the pool by equal-weight RRF. \emph{Pool reranking} reranks the pool's own
-top-100 (a (topic, document) score does not depend on the pool, so only documents new to the
-pool are scored) and fuses the result with the pool. The final system is the
-(reranker, combination) pair with the best macro nDCG@10 on the train split of the same
-sub-track.
-
-\subsection{Sub-track 1b}
-A step is retrieved with ``title + step instruction'' (ReasonIR: full question + step); the
-parent question's plan, neighbouring events, reasoning, metadata and LLM channels are shared
-by all of its steps.
+\paragraph{Time-matching ablations.} To test whether explicit time helps, we also build
+components that are \emph{not} part of the final system. A rule-based extractor normalises
+years, ranges and dates in every document (in the final system it only supplies the year span
+shown to the reranker); from it we build a year-filtered BM25, a year prior
+$s'(d){=}(1{-}\lambda)\hat s(d){+}\lambda T(q,d)$ ($T$: fraction of the question's years the
+document mentions, $\pm1$), and a document--entity--year graph searched with personalised
+PageRank; with the LLM metadata, a period filter for BM25 and dense retrieval (overlap with the
+question's period, $\pm2$ years, undated documents kept) and a period prior. $\lambda$ is chosen
+on train. We also run RM3 pseudo-relevance feedback \citep{lavrenko2001relevance,abduljaleel2004umass}.

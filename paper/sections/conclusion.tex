@@ -1,20 +1,20 @@
 \section{Conclusion}
 \label{sec:conclusion}
 
-We presented \sys, a hybrid retrieval and reranking system for RETECO Track~1, and used it to
-measure, on the complete data, which ideas transfer to temporal reasoning-intensive retrieval.
-Three findings stand out. (1)~Retrieval granularity matters more than temporal machinery:
-passage-level BM25 alone improves the official baseline by more than 70\%. (2)~Explicit dates
-are not a discriminative relevance signal on TEMPO---gold evidence mentions the query's years
-less often than the documents BM25 already ranks highly---so year priors, year filters and a
-year--entity graph do not help---nor do periods inferred by an LLM for every document and
-question---while semantic retrieval does: a 0.6B instruction-tuned
-embedder is the strongest single channel, and a temporal RAPTOR tree matches but does not
-exceed it. \ConclusionLLM{} (3)~\ConclusionRerank{}
+We presented \sys, a retrieval and reranking system for RETECO Track~1 evaluated on the
+complete data. Four findings stand out. (1)~Retrieval granularity matters more than temporal
+machinery: passage-level BM25 alone improves the official baseline by more than 70\%.
+(2)~Explicit dates are not a useful relevance signal on TEMPO---gold evidence mentions the
+question's years less often than the documents BM25 already ranks highly---so year filters,
+priors and graphs do not help, whether the dates come from rules or from an LLM. (3)~What
+helps is semantics: a reasoning-trained retriever is the strongest single channel, and LLM
+expansions---a hypothetical answer written with BM25 feedback and, above all, the events
+neighbouring the question---add complementary candidates. (4)~To select the top-10 from a
+top-100, decoder LLM rerankers prompted with the task's notion of relevance clearly beat encoder
+cross-encoders, which \emph{hurt} on long StackExchange questions.
 
-The final system reaches \rFinalA{} (1a) and \rFinalB{} (1b) nDCG@10 on dev, \gainOfficialA\%
-and \gainOfficialB\% above the official baseline, and \pooledFinalA{} on all TEMPO questions,
-above every retriever on the TEMPO leaderboard. Promising next steps are stronger reasoning
-for the reasoning-trained retriever (the largest gap to the leaderboard's best setting),
-rerankers fine-tuned on TEMPO's train judgments, the 4B reranker for steps, and LLM-written
-summaries at the upper levels of the temporal tree.
+\sys reaches \rFinalA{} (1a) and \rFinalB{} (1b) nDCG@10 on dev, \gainOfficialA\% and
+\gainOfficialB\% above the official baseline, and \pooledFinalA{} on all TEMPO questions, above
+every retriever on the TEMPO leaderboard. The largest remaining gap is the quality of the
+reasoning given to the reasoning-trained retriever; stronger reasoning, a reranker fine-tuned
+on TEMPO's train judgments and the 4B reranker for steps are the next steps.

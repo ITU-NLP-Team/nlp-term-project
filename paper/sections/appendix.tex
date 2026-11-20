@@ -5,7 +5,7 @@
 \section{Prompts}
 \label{app:prompts}
 
-\paragraph{Query planner (system message).}
+\paragraph{Query expansion: hypothetical answer and sub-queries (Qwen3-8B, system message).}
 {\scriptsize\begin{verbatim}
 You help a search engine answer time-sensitive questions
 from a StackExchange forum. Read the question and return
@@ -30,7 +30,7 @@ supplies the intent, events and sub-queries (TEMPO's retrieval plan), and whose 
 document supplies the answer passage (first 80 words) and keywords (salient entities absent
 from the question). Outputs are constrained to the JSON schema of these keys with vLLM guided
 decoding (greedy, repetition penalty 1.05); truncated outputs are recovered field by field.
-In the LLM-PRF variant the user turn ends with ``Top search results (may be noisy; reuse their
+In the variant with BM25 feedback the user turn ends with ``Top search results (may be noisy; reuse their
 terms and dates):'' and the first 60 words of the top-5 BM25 documents.
 
 \paragraph{Metadata extractor (Qwen3-1.7B, system message).}
@@ -98,22 +98,21 @@ time period.''}
 \toprule
 Passages & 200 words, overlap 40, $\leq$64/doc \\
 BM25 & Lucene, $k_1{=}0.9$, $b{=}0.4$, stem+stop \\
-RM3 & 10 docs, 20 terms, $\alpha\in\{.3,.5,.7\}$ \\
-Prior $\lambda$ & $\{0,.05,.1,.2,.3\}$, tolerance $\pm1$y \\
-Temporal PRF & top-20, support $\geq$3, span $\leq$10y \\
-Year-index filter & explicit query window, $\pm1$y \\
-Temporal KG & entity df $\leq$5\%, PPR $\alpha{=}0.85$ \\
 Dense & Qwen3-Emb.-0.6B, 384 tok, MaxP \\
 ReasonIR & 8B, 512 tok (query 1{,}024), MaxP \\
-LLM metadata & Qwen3-1.7B, 220 words / 1{,}600 chars \\
-Period filter / prior & $\pm2$y; $\lambda\in\{0,.05,.1,.2,.3\}$ \\
-RAPTOR & 2 levels, $\sim$10 children, $\beta{=}0.5$, \\
- & $\eta{=}0.3$, top-10 nodes expanded \\
+LLM metadata & Qwen3-1.7B, 220 words, \\
+ & at most 1{,}600 characters \\
+Expansions & Qwen3-8B, greedy, JSON-guided, \\
+ & BM25 feedback: top-5 snippets \\
 RRF & $k{=}60$, weights $\in\{1,\tfrac12\}$ \\
-Pointwise rerank & top-100 (BM25$\oplus$dense or pool), \\
- & best BM25 passage, 1{,}024 tokens \\
-Final fusion & equal-weight RRF, late or pool \\
-Generator & Qwen3-8B, greedy, non-thinking \\
+Reranking & pool top-100, best BM25 \\
+ & passage, 1{,}024 tokens \\
+\midrule
+\multicolumn{2}{l}{\textit{Ablations}} \\
+RM3 & 10 docs, 20 terms, $\alpha\in\{.3,.5,.7\}$ \\
+Year / period prior & $\lambda\in\{0,.05,.1,.2,.3\}$ \\
+Year / period filter & $\pm1$ / $\pm2$ years \\
+Temporal graph & entity df $\leq$5\%, PPR 0.85 \\
 \bottomrule
 \end{tabular}
 \caption{Hyper-parameters. Sets in braces are searched on train.}

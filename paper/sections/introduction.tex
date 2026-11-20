@@ -11,54 +11,37 @@ temporally useful. The official BM25 baseline reaches only \rOfficialA{} (Sub-tr
 \rOfficialB{} (1b) nDCG@10 on the development set.
 
 A natural reading of the task is that systems should \emph{match time}: extract dates from
-queries and documents, restrict or boost by period, and organise the corpus along a timeline.
-We built and measured exactly these components---a year index, a temporal knowledge graph, a
-temporal-alignment prior, temporal pseudo-relevance feedback, a time-aware RAPTOR tree, and
-periods, events and entities that a small LLM extracts from every document and every
-query---next to dense and reasoning-trained retrieval, LLM query planning and LLM reranking,
-on the complete RETECO~v1.1 data (1.17M documents, all 13 domains, both sub-tracks). Two observations shape
-the resulting system, \sys.
+questions and documents and restrict or boost by period. We tested this directly, with
+rule-based years and with periods that a small LLM infers for every document and question, and
+found that it does not help. Among questions that mention a year, only \pctGoldOverlap{} of gold
+documents mention a year within $\pm1$ of it, against \pctTopOverlap{} of the non-relevant
+documents that BM25 ranks in its top~10 (Table~\ref{tab:data}): lexical retrieval already
+over-rewards matching dates. Relevant evidence instead describes the events and mechanisms
+behind a question, often without repeating its dates.
 
-First, \textbf{surface temporal matching is already saturated}. Among queries that mention a
-year, only \pctGoldOverlap{} of gold documents mention a year within $\pm1$ of it, against
-\pctTopOverlap{} of the non-relevant documents that BM25 ranks in its top~10
-(Table~\ref{tab:data}): lexical retrieval already over-rewards matching dates. Consistently,
-year-based priors, filters and graphs do not improve, and often hurt, a lexical first stage,
-and this does not change when the periods are inferred by an LLM rather than by rules.
-Second, \textbf{temporal relevance is mostly semantic}. Passage-level BM25 alone lifts the
-official baseline from \rOfficialA{} to \rBmA{} (1a), and an instruction-tuned dense encoder
-reaches \rDenseA{}, because relevant evidence describes the events and mechanisms behind a
-question rather than repeating its dates.
-
-\sys therefore uses time where it carries information that text similarity does not---in
-LLM-generated \emph{neighbouring events} (causes, earlier and later events, each with a year)
-that become sub-queries, in the reasoning that a reasoning-trained retriever receives, in the
-rendering of candidates and in the instructions of LLM rerankers---and spends its capacity on
-a hybrid first stage selected on train and on LLM reranking. On the dev split it reaches
-\rFinalA{} nDCG@10 on 1a and \rFinalB{} on 1b, \gainOfficialA\% and \gainOfficialB\% above the
-official baseline. Because RETECO's train and dev questions are exactly the 1{,}730 questions
-of the TEMPO benchmark, we also place \sys on the TEMPO leaderboard: with \pooledFinalA{}
-(1a) and \pooledFinalB{} (1b) nDCG@10$\times$100 it is above all twelve published retrievers
-on questions and on par with the best ones on steps, but below ReasonIR given GPT-4o's
-reasoning (41.0; Table~\ref{tab:tempo}).
+\sys is built on that observation. It retrieves passages rather than whole documents, which
+alone lifts BM25 from \rOfficialA{} to \rBmA{} (1a); it adds a dense embedder and a
+reasoning-trained retriever (ReasonIR-8B); and it lets an LLM expand each question with a
+hypothetical answer, sub-queries, the events \emph{neighbouring} the question (its causes,
+earlier and later events, each with a year) and free-text reasoning. The channels to fuse are
+selected on train, and a decoder LLM reranks the top-100. On dev, \sys reaches \rFinalA{}
+nDCG@10 on 1a and \rFinalB{} on 1b, \gainOfficialA\% and \gainOfficialB\% above the official
+baseline. Because RETECO's train and dev questions are the 1{,}730 TEMPO questions, we can also
+place it on the TEMPO leaderboard (Table~\ref{tab:tempo}): with \pooledFinalA{} on questions it
+is above all twelve published retrievers, though below a reasoning retriever given GPT-4o's
+reasoning (41.0).
 
 Our contributions are:
 \begin{itemize}
-  \item A controlled comparison, on all 13 domains and both sub-tracks, of temporal structures
-        (year index, temporal KG, temporal prior, temporal PRF, temporal RAPTOR, and
-        LLM-extracted document and query periods used as filters, priors and a metadata
-        index), lexical and LLM query expansion (RM3, keywords, query2doc, multi-query with
-        an LLM-generated \emph{event chain}, neighbouring events, and LLM-based
-        pseudo-relevance feedback), dense and reasoning-trained retrieval (ReasonIR-8B with
-        and without LLM reasoning), and encoder and decoder rerankers, with every
-        configuration selected on train.
-  \item A diagnostic of TEMPO showing why date matching fails as a relevance signal, and the
-        finding that passage-level retrieval alone explains most of the gap to the official
-        baseline.
-  \item A comparison with the TEMPO leaderboard on the same questions and steps.
-  \item A head-to-head comparison of encoder cross-encoders and decoder LLM rerankers
-        (``cross-decoders'') for selecting the top-10 out of the same top-100.
-  \item An open, staged implementation that runs on a laptop CPU and on a GPU cluster, with
-        cached stages, official scoring and significance tests.\footnote{Code:
+  \item A system for both sub-tracks that combines passage retrieval, dense and
+        reasoning-trained retrieval, LLM query expansion with neighbouring events, a
+        train-selected fusion and LLM reranking, evaluated on all 13 domains without
+        sub-sampling.
+  \item Evidence that date matching is not a useful relevance signal on TEMPO, whether dates
+        come from rules or from an LLM.
+  \item A comparison of encoder cross-encoders and decoder LLM rerankers on the same
+        candidates, and a comparison with the TEMPO leaderboard on the same questions.
+  \item Open code that runs on a GPU cluster and on a laptop CPU, with cached stages, official
+        scoring and significance tests.\footnote{Code:
         \url{https://github.com/ITU-NLP-Team/nlp-term-project}}
 \end{itemize}

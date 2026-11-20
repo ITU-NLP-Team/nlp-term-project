@@ -3,11 +3,11 @@
 **Hybrid retrieval and LLM reranking for RETECO, SemEval-2027 Task 1, Track 1 (TEMPO).**
 
 ChronoFuse ranks evidence for time-sensitive StackExchange questions (Sub-track 1a) and for
-their reasoning steps (1b). It is also a controlled benchmark: on the complete RETECO v1.1 data
-(13 domains, 1.17M documents) it measures which retrieval ideas transfer to temporal
-reasoning-intensive retrieval: date-based structures, LLM-extracted periods and events, a
-time-aware RAPTOR tree, LLM query planning with neighbouring events, dense and
-reasoning-trained retrieval (ReasonIR-8B), and encoder vs. decoder rerankers.
+their reasoning steps (1b). It retrieves 200-word passages with BM25, a dense embedder and
+ReasonIR-8B, expands each question with an LLM (hypothetical answer, sub-queries, neighbouring
+events, reasoning), fuses the channels chosen on train and reranks the top-100 with a decoder
+LLM. Evaluated on the complete RETECO v1.1 data (13 domains, 1.17M documents); it also shows
+that matching dates, from rules or from an LLM, does not help.
 
 | | |
 |---|---|
@@ -28,17 +28,14 @@ Every choice (RM3 α, prior λ, pool channels and weights, final reranker) is se
 |---|---:|---:|
 | BM25, document level (official baseline) | .115 | .118 |
 | BM25, 200-word passages + MaxP | .197 | .223 |
-| + temporal prior / year-index filter / temporal KG | ≤ .197 | ≤ .223 |
-| LLM-PRF query2doc (Qwen3-8B plan + BM25 feedback) | .242 | .223 |
+| + year prior / year filter / temporal graph / LLM period filter (ablations) | ≤ .197 | ≤ .223 |
+| query2doc with BM25 feedback (Qwen3-8B) | .242 | .223 |
 | Dense, Qwen3-Embedding-0.6B | .297 | .314 |
-| Temporal RAPTOR tree | .290 | .299 |
-| + LLM period filter (Qwen3-1.7B metadata), dense | .292 | .303 |
 | Neighbouring events + sub-queries (BM25 ⊕ dense) | .278 | .269 |
 | ReasonIR-8B (full question; 1b: question + step) | .315 | .326 |
 | ReasonIR-8B + Qwen3-8B reasoning | .336 | .321 |
 | Train-selected hybrid pool (weighted RRF) | .346 | .349 |
 | BM25 ⊕ dense top-100 → Qwen3-Reranker-4B (cross-decoder) | .352 | – |
-| ChronoFuse v1 (before metadata, neighbouring events, ReasonIR) | .371 | .341 |
 | **ChronoFuse** (pool top-100 → Qwen3-Reranker 4B / 0.6B, ⊕ pool) | **.387** | **.371** |
 
 Main findings: retrieval granularity (passages) explains most of the gap to the official
@@ -55,18 +52,14 @@ Table 3; our corpora are the deduplicated v1.1 ones and train was used for selec
 
 ```
 OFFLINE (per domain)                          ONLINE (per question / step)
-documents.jsonl                               question ──► Qwen3-8B (vLLM; optional BM25 feedback):
- ├─ 200-word passages (+ contextual title)      │   plan (event chain, sub-queries, keywords, query2doc),
- │   ├─ BM25 (bm25s, streaming builder)         │   neighbouring events, free-text reasoning
- │   ├─ dense (Qwen3-Embedding-0.6B)            ├─► Qwen3-1.7B: query period / events / entities
- │   └─ ReasonIR-8B (4096-d, sharded)           ▼
- ├─ temporal profile, entities, title         22 channels: BM25, RM3, dense, ReasonIR (± reasoning), RAPTOR,
- ├─ LLM metadata (Qwen3-1.7B): period,                 KG, year / period filters, metadata index,
- │   events, entities, keywords, topic                 LLM keywords / q2d / multi-query, neighbouring events
- │   ├─ year index, period filter             ├─► pool = weighted RRF of channels (forward selection on train)
- │   ├─ metadata BM25 index, temporal KG      └─► pool top-100 → reranker (Qwen3-Reranker 4B | 0.6B)
- │   └─ temporal RAPTOR tree                            final = RRF(pool, reranked top-100) → top-10
- └─ SQLite doc store
+documents.jsonl                               question ──► Qwen3-8B (vLLM, top-5 BM25 as feedback):
+ ├─ 200-word passages (+ title), MaxP           │   query2doc, sub-queries, neighbouring events, reasoning
+ │   ├─ BM25 (bm25s, streaming builder)         ▼
+ │   ├─ Qwen3-Embedding-0.6B                  channels: BM25 / dense / ReasonIR with the expanded queries,
+ │   └─ ReasonIR-8B                                     metadata index
+ └─ Qwen3-1.7B metadata (period, events,      ├─► pool = weighted RRF of channels (forward selection on train)
+     entities) → metadata BM25 index          └─► pool top-100 → Qwen3-Reranker (4B for 1a, 0.6B for 1b)
+                                                         final = RRF(pool, reranked top-100) → top-10
 ```
 
 ## Project layout

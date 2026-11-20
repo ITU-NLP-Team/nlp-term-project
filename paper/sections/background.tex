@@ -27,17 +27,12 @@ struggle when relevance requires inference, which motivated reasoning-trained re
 whose results are fused \citep{rackauckas2024ragfusion}. For reranking, encoder
 cross-encoders \citep{nogueira2019passage} were followed by sequence-to-sequence
 \citep{nogueira2020monot5} and decoder-only pointwise rerankers \citep{zhang2025qwen3emb}, and
-by listwise prompting with sliding windows \citep{sun2023rankgpt}.
-
-\paragraph{Structure-aware retrieval.} RAPTOR \citep{sarthi2024raptor} builds a tree of
-recursive cluster summaries; GraphRAG \citep{edge2024graphrag} and HippoRAG
-\citep{gutierrez2024hipporag} retrieve through entity graphs, the latter with personalised
-PageRank. Cluster-based retrieval in IR \citep{liu2004cluster,kurland2004corpus} smooths a
-document's score with that of its cluster.
+by listwise prompting \citep{sun2023rankgpt}.
 
 \paragraph{Temporal IR.} Temporal expression taggers \citep{strotgen2010heideltime} normalise
 dates; time-aware ranking combines textual relevance with a temporal similarity between query
 and document \citep{campos2014survey}, and the temporal profile of a query can be estimated from
 the dates of its top-ranked documents \citep{jones2007temporal}. TEMPO's analysis reports that
 lexical, dense and reasoning retrievers all stay far below their performance on non-temporal
-benchmarks \citep{abdallah2026tempo}; we test which of the above ideas transfer.
+benchmarks, and that a reasoning retriever gains most when the query is extended with an LLM's
+reasoning \citep{abdallah2026tempo}.

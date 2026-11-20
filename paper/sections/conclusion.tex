@@ -7,11 +7,14 @@ Three findings stand out. (1)~Retrieval granularity matters more than temporal m
 passage-level BM25 alone improves the official baseline by more than 70\%. (2)~Explicit dates
 are not a discriminative relevance signal on TEMPO---gold evidence mentions the query's years
 less often than the documents BM25 already ranks highly---so year priors, year filters and a
-year--entity graph do not help, while semantic retrieval does: a 0.6B instruction-tuned
+year--entity graph do not help---nor do periods inferred by an LLM for every document and
+question---while semantic retrieval does: a 0.6B instruction-tuned
 embedder is the strongest single channel, and a temporal RAPTOR tree matches but does not
 exceed it. \ConclusionLLM{} (3)~\ConclusionRerank{}
 
 The final system reaches \rFinalA{} (1a) and \rFinalB{} (1b) nDCG@10 on dev, \gainOfficialA\%
-and \gainOfficialB\% above the official baseline. Promising next steps are reasoning-trained
-retrievers \citep{shao2025reasonir}, rerankers fine-tuned on TEMPO's train judgments, and
-LLM-written summaries at the upper levels of the temporal tree.
+and \gainOfficialB\% above the official baseline, and \pooledFinalA{} on all TEMPO questions,
+above every retriever on the TEMPO leaderboard. Promising next steps are stronger reasoning
+for the reasoning-trained retriever (the largest gap to the leaderboard's best setting),
+rerankers fine-tuned on TEMPO's train judgments, the 4B reranker for steps, and LLM-written
+summaries at the upper levels of the temporal tree.

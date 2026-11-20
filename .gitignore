@@ -10,6 +10,9 @@ results/metrics/*
 !results/metrics/bench_dev.json
 !results/metrics/bench_train.json
 !results/metrics/pool_selection.json
+!results/metrics/bench_dev_v1.json
+!results/metrics/bench_train_v1.json
+!results/metrics/pool_selection_v1.json
 !results/metrics/analysis_dev.json
 !results/metrics/data_analysis_train.json
 results/cache*/

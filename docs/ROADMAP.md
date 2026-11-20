@@ -12,9 +12,12 @@ geçen, ablation'larla desteklenmiş bir sistem ve ACL formatında makale.
 | 4 | Dense indeks (Qwen3-Embedding-0.6B, A100) + RAPTOR / temporal RAPTOR | makale Tablo 3 | ✅ |
 | 5 | LLM sorgu planlayıcı (Qwen3-8B, olay örgüsü, multi-query, q2d, LLM-PRF) | makale Tablo 3 | ✅ |
 | 6 | Cross-encoder vs. cross-decoder rerank (top-100 → top-10), havuz seçimi | makale Tablo 4 | ✅ |
-| 7 | Nihai sistem: 1a .371, 1b .341 (dev) | makale Tablo 2 | ✅ |
+| 7 | Nihai sistem v1: 1a .371, 1b .341 (dev) | `bench_dev_v1.json` | ✅ |
 | 8 | Domain ve intent analizi, figürler, makale ve sunum | `paper/main.pdf`, sunum | ✅ |
-| 9 | 4B reranker'ı 1b ve seçilen havuzda çalıştırmak, listwise; Ocak 2027 test penceresinde submission | runs | ⏳ |
+| 9 | Küçük LLM (Qwen3-1.7B) ile 1,17M belge + sorgu metadata'sı; dönem filtresi / prior / metadata indeksi | makale Tablo 5 | ✅ (dönem: fayda yok) |
+| 10 | Komşu olaylar + alt sorgular (Qwen3-8B), ReasonIR-8B (± LLM akıl yürütmesi) | makale Tablo 2, 5 | ✅ |
+| 11 | Nihai sistem v2: 1a .387, 1b .371 (dev); TEMPO tablosunda 1.730 soruda 33.4 | makale Tablo 3 | ✅ |
+| 12 | 4B reranker'ı 1b'de çalıştırmak, listwise; Ocak 2027 test penceresinde submission | runs | ⏳ |
 
 ## Kurallar
 - Ayarlama **train**'de, raporlama **dev**'de. Guidance/gold hiçbir zaman değerlendirilen sorgu için girdi değildir.

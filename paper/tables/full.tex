@@ -12,6 +12,7 @@
 \multicolumn{6}{l}{\textit{Lexical and pseudo-relevance feedback}} \\
 & BM25 (passage, MaxP) & .197 & .520 & .223 & .614 \\
 & BM25 + RM3 PRF ($\alpha{=}0.3$) & .177$^{\dagger}$ & .518 & .209$^{\dagger}$ & .630 \\
+& BM25, 1b input = full query + step & -- & -- & .208$^{\dagger}$ & .644 \\
 \midrule
 \multicolumn{6}{l}{\textit{Temporal metadata (prior, year index, KG)}} \\
 & BM25, year tokens $\times$0.5 & .195$^{\dagger}$ & .521 & .221$^{\dagger}$ & .612 \\
@@ -23,13 +24,16 @@
 & temporal KG (personalised PageRank) & .069$^{\dagger}$ & .153 & .070$^{\dagger}$ & .173 \\
 & BM25 $\oplus$ temporal KG & .161$^{\dagger}$ & .484 & .190$^{\dagger}$ & .590 \\
 \midrule
-\multicolumn{6}{l}{\textit{Dense retrieval and RAPTOR trees}} \\
+\multicolumn{6}{l}{\textit{Dense retrieval (Qwen3-Emb.-0.6B, ReasonIR-8B) and RAPTOR trees}} \\
 & dense (Qwen3-Embedding-0.6B, passages) & .297$^{\dagger}$ & .710 & .314$^{\dagger}$ & .791 \\
 & dense, document vectors & .306$^{\dagger}$ & .695 & .312$^{\dagger}$ & .766 \\
 & RAPTOR tree (collapsed, no time) & .287$^{\dagger}$ & .698 & .301$^{\dagger}$ & .756 \\
 & temporal RAPTOR tree & .290$^{\dagger}$ & .709 & .299$^{\dagger}$ & .764 \\
 & BM25 $\oplus$ dense & .281$^{\dagger}$ & .697 & .309$^{\dagger}$ & .773 \\
 & BM25 $\oplus$ temporal RAPTOR & .286$^{\dagger}$ & .706 & .305$^{\dagger}$ & .771 \\
+& ReasonIR-8B (passages, full query) & .315$^{\dagger}$ & .762 & .326$^{\dagger}$ & .847 \\
+& ReasonIR-8B + LLM reasoning query & .336$^{\dagger}$ & .745 & .321$^{\dagger}$ & .832 \\
+& ReasonIR $\oplus$ ReasonIR + reasoning & .340$^{\dagger}$ & .767 & .330$^{\dagger}$ & .851 \\
 \midrule
 \multicolumn{6}{l}{\textit{LLM query planning (Qwen3-8B)}} \\
 & LLM keyword expansion & .231$^{\dagger}$ & .588 & .218$^{\dagger}$ & .670 \\
@@ -39,8 +43,18 @@
 & LLM-PRF query2doc & .242$^{\dagger}$ & .593 & .223$^{\dagger}$ & .672 \\
 & LLM-PRF multi-query + event chain & .244$^{\dagger}$ & .587 & .237 & .674 \\
 \midrule
+\multicolumn{6}{l}{\textit{Small-LLM metadata (Qwen3-1.7B) and neighbouring events (Qwen3-8B)}} \\
+& BM25 + small-LLM events/entities/keywords & .226$^{\dagger}$ & .593 & .221 & .659 \\
+& BM25 over LLM document metadata & .184$^{\dagger}$ & .587 & .196$^{\dagger}$ & .665 \\
+& BM25, LLM-period filter & .195 & .499 & .217$^{\dagger}$ & .581 \\
+& dense, LLM-period filter & .292$^{\dagger}$ & .664 & .303$^{\dagger}$ & .741 \\
+& BM25 $\oplus$ dense + LLM-period prior ($\lambda{=}0.1$) & .287$^{\dagger}$ & .697 & .309$^{\dagger}$ & .773 \\
+& BM25 $\oplus$ dense $\oplus$ metadata channels (filtered) & .279$^{\dagger}$ & .702 & .311$^{\dagger}$ & .793 \\
+& neighbouring events + sub-queries (BM25) & .229$^{\dagger}$ & .630 & .229 & .732 \\
+& neighbouring events + sub-queries (BM25 $\oplus$ dense) & .278$^{\dagger}$ & .750 & .269$^{\dagger}$ & .819 \\
+\midrule
 \multicolumn{6}{l}{\textit{Train-selected hybrid pool}} \\
-& train-selected hybrid pool (RRF) & .332$^{\dagger}$ & .738 & .325$^{\dagger}$ & .825 \\
+& train-selected hybrid pool (RRF) & .346$^{\dagger}$ & .783 & .349$^{\dagger}$ & .873 \\
 \midrule
 \multicolumn{6}{l}{\textit{Pointwise reranking of the BM25 $\oplus$ dense top-100}} \\
 & BM25 $\oplus$ dense $\rightarrow$ MiniLM-L12 cross-encoder & .179$^{\dagger}$ & .697 & .233$^{\dagger}$ & .773 \\
@@ -52,15 +66,15 @@
 & BM25 $\oplus$ dense $\rightarrow$ Qwen3-Reranker-4B & .352$^{\dagger}$ & .697 & -- & -- \\
 & BM25 $\oplus$ dense $\oplus$ Qwen3-Reranker-4B & .352$^{\dagger}$ & .697 & -- & -- \\
 \midrule
-\multicolumn{6}{l}{\textit{Selected pool $\oplus$ reranked BM25 $\oplus$ dense top-100 (final fusion)}} \\
-& selected pool $\oplus$ MiniLM-L12 cross-encoder & .280$^{\dagger}$ & .734 & .315$^{\dagger}$ & .817 \\
-& selected pool $\oplus$ BGE-reranker-v2-m3 & .289$^{\dagger}$ & .732 & .341$^{\dagger}$ & .817 \\
-& selected pool $\oplus$ Qwen3-Reranker-0.6B & .347$^{\dagger}$ & .741 & \textbf{.352$^{\dagger}$} & .814 \\
-& selected pool $\oplus$ Qwen3-Reranker-4B & \textbf{.371$^{\dagger}$} & .743 & -- & -- \\
-& ChronoFuse (final, train-selected) & \textbf{.371$^{\dagger}$} & .743 & .341$^{\dagger}$ & .817 \\
-\midrule
-\multicolumn{6}{l}{\textit{Lexical and pseudo-relevance feedback}} \\
-& BM25, 1b input = full query + step & -- & -- & .208$^{\dagger}$ & .644 \\
+\multicolumn{6}{l}{\textit{Final fusion: pool $\oplus$ reranked candidates}} \\
+& selected pool $\oplus$ MiniLM-L12 cross-encoder & .294$^{\dagger}$ & .767 & .332$^{\dagger}$ & .866 \\
+& selected pool $\oplus$ BGE-reranker-v2-m3 & .309$^{\dagger}$ & .763 & .355$^{\dagger}$ & .860 \\
+& selected pool $\rightarrow$ BGE-reranker-v2-m3, $\oplus$ pool & .307$^{\dagger}$ & .783 & .357$^{\dagger}$ & .873 \\
+& selected pool $\oplus$ Qwen3-Reranker-0.6B & .349$^{\dagger}$ & .767 & .367$^{\dagger}$ & .865 \\
+& selected pool $\rightarrow$ Qwen3-Reranker-0.6B, $\oplus$ pool & .351$^{\dagger}$ & .783 & \textbf{.371$^{\dagger}$} & .873 \\
+& selected pool $\oplus$ Qwen3-Reranker-4B & .382$^{\dagger}$ & .768 & -- & -- \\
+& selected pool $\rightarrow$ Qwen3-Reranker-4B, $\oplus$ pool & \textbf{.387$^{\dagger}$} & .783 & -- & -- \\
+& ChronoFuse (final, train-selected) & \textbf{.387$^{\dagger}$} & .783 & \textbf{.371$^{\dagger}$} & .873 \\
 \bottomrule
 \end{tabular}
 \caption{Macro nDCG@10 and recall@100 on the RETECO Track~1 \textbf{dev} split (13 domains, v1.1). Hyper-parameters, the pool composition and the final configuration were selected on \textbf{train}. $^{\dagger}$: different from our passage BM25 at $p<0.05$ (paired randomisation test over queries/steps). $\oplus$: reciprocal rank fusion.}

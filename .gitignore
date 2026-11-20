@@ -2,7 +2,9 @@
 data/raw/
 data/processed/*
 data/indexes/*
+data/embeddings/*
 !data/**/.gitkeep
+*.npy
 results/runs/*
 results/metrics/*
 !results/**/.gitkeep

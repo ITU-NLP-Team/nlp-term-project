@@ -1,0 +1,35 @@
+\begin{table}[t]
+\centering
+\small
+\begin{tabular}{lcc}
+\toprule
+\textbf{System} & \textbf{1a} & \textbf{1b} \\
+\midrule
+\multicolumn{3}{l}{\textit{TEMPO leaderboard \citep{abdallah2026tempo}}} \\
+BM25 & 10.8 & 10.8 \\
+Contriever & 21.4 & 20.7 \\
+BGE & 22.0 & 21.5 \\
+Qwen & 22.8 & 28.2 \\
+Rader & 24.2 & 25.5 \\
+Inst-L & 24.8 & 26.9 \\
+SBERT & 24.9 & 25.9 \\
+GritLM & 27.2 & 28.2 \\
+ReasonIR & 27.2 & \underline{35.0} \\
+SFR & 30.0 & 33.3 \\
+E5 & 30.4 & 32.1 \\
+DiVeR & \underline{32.0} & 33.3 \\
+ReasonIR + GPT-4o reasoning & 41.0 & -- \\
+\midrule
+\multicolumn{3}{l}{\textit{Ours (RETECO v1.1)}} \\
+BM25, passages + MaxP & 18.5 & 20.2 \\
+Dense (Qwen3-Emb.-0.6B) & 25.1 & 26.8 \\
+ReasonIR-8B, passages & 26.0 & 27.6 \\
+ReasonIR-8B + Qwen3-8B reasoning & 27.0 & 27.1 \\
+Hybrid pool & 30.3 & 32.5 \\
+\sys v1 (no metadata / ReasonIR) & 32.3 & 31.9 \\
+\textbf{\sys (final)} & 33.4 & 33.2 \\
+\bottomrule
+\end{tabular}
+\caption{nDCG@10 ($\times$100) on all 1{,}730 TEMPO questions (1a) and 3{,}976 steps (1b, \emph{Query+Step} on the leaderboard), i.e.\ RETECO train $+$ dev. Leaderboard numbers are copied from \citet{abdallah2026tempo}; underlined: best single retriever. Caveats: our runs use the deduplicated RETECO~v1.1 corpora (1.17M documents vs.\ 1.65M), and the train part of our numbers was used for selection.}
+\label{tab:tempo}
+\end{table}

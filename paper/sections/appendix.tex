@@ -33,6 +33,58 @@ decoding (greedy, repetition penalty 1.05); truncated outputs are recovered fiel
 In the LLM-PRF variant the user turn ends with ``Top search results (may be noisy; reuse their
 terms and dates):'' and the first 60 words of the top-5 BM25 documents.
 
+\paragraph{Metadata extractor (Qwen3-1.7B, system message).}
+{\scriptsize\begin{verbatim}
+You extract search metadata from a text taken from a
+StackExchange forum or the documents it cites. Return ONLY
+a JSON object with these keys:
+"start_year", "end_year": the period the text is ABOUT, as
+  years. Infer implicit periods too (e.g. "after the 2008
+  crisis" -> 2008-2010, "during the Weimar Republic" ->
+  1919-1933). Use null for both if no period can be
+  inferred.
+"events": at most 5 short phrases naming the events,
+  changes or releases the text discusses
+"entities": at most 6 named people, organisations,
+  products, laws, coins or places
+"keywords": at most 6 topical search terms that are not
+  entity names
+"topic": a 2-5 word subtopic label
+\end{verbatim}}
+
+\paragraph{Neighbouring events (Qwen3-8B, system message).}
+{\scriptsize\begin{verbatim}
+You help a search engine find evidence for a time-sensitive
+question. Relevant documents often describe related events
+and mechanisms rather than repeating the question's words
+or dates. Return ONLY a JSON object with these keys:
+"period": [first_year, last_year] the evidence is about,
+  or null
+"neighbor_events": 4-6 events closely connected to the
+  question (causes, preceding and following events,
+  parallel developments), each {"event": short phrase with
+  names, "year": int or null, "relation": one of cause,
+  before, same_time, after, effect}
+"sub_queries": 4 short self-contained search queries; each
+  targets one event or aspect and names its period
+"expansion_terms": 10 terms likely to appear in relevant
+  documents that are not already in the question
+\end{verbatim}}
+\noindent The user turn contains the question and the first 60 words of the top-5 BM25
+documents.
+
+\paragraph{Reasoning for ReasonIR (Qwen3-8B, user message).}
+{\scriptsize\begin{verbatim}
+<question>
+Instructions:
+1. Identify the essential problem, including the time
+   period and the events it depends on.
+2. Think step by step to reason about what information
+   relevant documents would contain (earlier and later
+   events, causes, names, dates, mechanisms).
+3. Draft an answer with as many thoughts as you have.
+\end{verbatim}}
+
 \paragraph{Cross-decoder instruction (Qwen3-Reranker).}
 {\small ``Given a time-sensitive question from a StackExchange forum, judge whether the document
 contains evidence that helps answer it, including information about the relevant events and
@@ -52,12 +104,15 @@ Temporal PRF & top-20, support $\geq$3, span $\leq$10y \\
 Year-index filter & explicit query window, $\pm1$y \\
 Temporal KG & entity df $\leq$5\%, PPR $\alpha{=}0.85$ \\
 Dense & Qwen3-Emb.-0.6B, 384 tok, MaxP \\
+ReasonIR & 8B, 512 tok (query 1{,}024), MaxP \\
+LLM metadata & Qwen3-1.7B, 220 words / 1{,}600 chars \\
+Period filter / prior & $\pm2$y; $\lambda\in\{0,.05,.1,.2,.3\}$ \\
 RAPTOR & 2 levels, $\sim$10 children, $\beta{=}0.5$, \\
  & $\eta{=}0.3$, top-10 nodes expanded \\
 RRF & $k{=}60$, weights $\in\{1,\tfrac12\}$ \\
-Pointwise rerank & BM25$\oplus$dense top-100, \\
+Pointwise rerank & top-100 (BM25$\oplus$dense or pool), \\
  & best BM25 passage, 1{,}024 tokens \\
-Final fusion & equal-weight RRF \\
+Final fusion & equal-weight RRF, late or pool \\
 Generator & Qwen3-8B, greedy, non-thinking \\
 \bottomrule
 \end{tabular}

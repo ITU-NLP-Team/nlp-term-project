@@ -3,6 +3,7 @@
 
 \input{tables/data}
 \input{tables/main}
+\input{tables/tempo}
 
 Table~\ref{tab:main} gives the headline numbers; Table~\ref{tab:full} in
 Appendix~\ref{app:full} lists every system with recall@100 and significance against our
@@ -26,17 +27,39 @@ the non-relevant documents BM25 retrieves, and overlap the query's years less of
 (\pctGoldOverlap{} vs.\ \pctTopOverlap{}). RM3 also hurts (\rRmA{}): feedback documents of
 long StackExchange questions are noisy.
 
-\paragraph{Dense retrieval is the strongest single channel.} Qwen3-Embedding-0.6B over
-passages reaches \rDenseA{} (1a) and \rDenseB{} (1b), and its document-vector variant
-\rDenseDocA{} (1a). Equal-weight fusion with BM25 is \emph{below} dense alone
-(\rBmDenseA{}), which is why the pool is selected with weights on train.
+\paragraph{LLM-extracted periods do not help either.} One might suspect the rule-based
+extractor: it misses implicit periods. Periods inferred by Qwen3-1.7B for every document and
+question do not change the picture. Filtering by the LLM period costs a little for BM25
+(\rBmA{}$\rightarrow$\rMetaTfBmA{}) and for dense retrieval
+(\rDenseA{}$\rightarrow$\rMetaTfDenseA{}), and so does it on 1b (\rBmB{}$\rightarrow$\rMetaTfBmB{},
+\rDenseB{}$\rightarrow$\rMetaTfDenseB{}); the soft period prior on BM25 $\oplus$ dense is
+selected with $\lambda{=}\metaPriorLamA$ on 1a, where its small dev gain
+(\rBmDenseA{}$\rightarrow$\rMetaPriorA{}) is absent on train (.241$\rightarrow$.242), and
+switched off ($\lambda{=}\metaPriorLamB$) on 1b. The \emph{content} fields of the same records
+are useful, though: adding the question's LLM events, entities and keywords to BM25 gives
+\rMetaKwA{} (1a), on par with the planner's keyword channel (\rKwA{}), and the document-level
+metadata index, weak alone (\rMetaFieldA{}), is picked by forward selection for the 1a pool.
+
+\paragraph{Dense and reasoning-trained retrieval.} Qwen3-Embedding-0.6B over passages reaches
+\rDenseA{} (1a) and \rDenseB{} (1b), and its document-vector variant \rDenseDocA{} (1a).
+Equal-weight fusion with BM25 is \emph{below} dense alone (\rBmDenseA{}), which is why the
+pool is selected with weights on train. ReasonIR-8B is the strongest single retriever:
+\rRirA{} (1a) and \rRirB{} (1b) on dev, with the highest recall@100 of any single channel.
+Appending Qwen3-8B's reasoning to the question helps on 1a (\rRirReasonA{}) but not on 1b
+(\rRirReasonB{}), and the difference to plain ReasonIR is not significant; fusing both runs
+gives \rRirBothA{} / \rRirBothB{}. Over all TEMPO questions, our passage-level ReasonIR
+(\pooledRirA{}) is close to the leaderboard's document-level ReasonIR (27.2), but reasoning
+from an 8B open model adds only one point (\pooledRirReasonA{}), far from the 13.8 points
+reported with GPT-4o's reasoning \citep{abdallah2026tempo}: the quality of the reasoning, not
+the mechanism, seems to carry that gain.
 
 \paragraph{Temporal RAPTOR.} The collapsed tree performs on par with flat dense retrieval
 (\rRaptorA{}/\rRaptorTA{} for the plain/temporal tree on 1a, \rRaptorB{}/\rRaptorTB{} on 1b):
 cluster smoothing and child expansion neither help nor hurt much when the leaves are already
 strong, and adding the time dimension to the clustering changes little on its own. Its
-value is complementarity: forward selection adds the temporal tree to the 1b pool, where its
-cluster-expanded candidates raise recall beyond flat dense retrieval. Unlike LLM-summarised
+value was complementarity: before the ReasonIR and neighbouring-event channels existed,
+forward selection added the temporal tree to the 1b pool for its cluster-expanded
+candidates; with them, it is no longer selected. Unlike LLM-summarised
 RAPTOR, our centroid tree adds no new text to match against; we return to this in the
 limitations.
 
@@ -50,12 +73,21 @@ for LLM-PRF multi-query vs.\ \rBmB{}), since plans describe the parent question 
 the step. The planner agrees with the gold temporal intent for \plannerIntentAcc{} of dev
 queries and, when the gold anchors contain a year, its window covers one of them for
 \plannerWindowHit{}; it produces \plannerEvents{} events per question on average. Alone, the
-LLM channels stay below dense retrieval, but they are complementary to it: forward selection
-adds LLM-PRF query2doc to the pool in both sub-tracks (next paragraph).
+LLM channels stay below dense retrieval, but they are complementary to it and enter the pool
+in both sub-tracks (below).
+
+\paragraph{Neighbouring events.} Asking the LLM for the events around the question, rather
+than the question's own events, is the most useful expansion. With BM25 only, it lifts
+recall@100 from \rRecallBmA{} to .630 on 1a (\rNbrBmA{} nDCG@10); with dense runs for every
+sub-query and event (\emph{nbr-hybrid}) it is the best single channel on 1a \emph{train} and
+reaches \rNbrHybridA{} / \rNbrHybridB{} on dev with recall@100 of .750 / .819, the highest of
+all channels except ReasonIR. Forward selection starts the 1a pool from it.
 
 \paragraph{Hybrid pool.} Forward selection on train picks \poolChannelsA{} for 1a and
 \poolChannelsB{} for 1b, reaching \rPoolA{} / \rPoolB{} on dev with recall@100 of
-\rRecallPoolA{} / \rRecallPoolB{} (BM25: \rRecallBmA{} / \rRecallBmB{}).
+\rRecallPoolA{} / \rRecallPoolB{} (BM25: \rRecallBmA{} / \rRecallBmB{}). Without the
+metadata, neighbouring-event and ReasonIR channels the selected pool reached \rPoolVoneA{} /
+\rPoolVoneB{}.
 
 \input{tables/rerank}
 
@@ -70,15 +102,27 @@ picture is the same (\rMiniLMB{}, \rBgeB{} and \rQsmallRRB{} alone vs.\ \rBmDens
 between the encoder and decoder families is larger than the gap between the two decoder sizes,
 so the LLM backbone and the task instruction matter more than scale here.
 
-\paragraph{Final system.} \sys fuses the train-selected pool with the candidates reranked by
-the reranker whose fused system is best on train for the sub-track---\finalRerankA{} for 1a and
-\finalRerankB{} for 1b (the 4B model is not a 1b candidate, see \S\ref{sec:setup}). It reaches
-\rFinalA{} (1a) and \rFinalB{} (1b) nDCG@10 on dev with recall@100 of \rRecallFinalA{} /
+\paragraph{Final system.} On train, reranking the selected pool's own top-100 and fusing it
+with the pool beats late fusion for the decoder rerankers; the best pair uses \finalRerankA{} for 1a
+and \finalRerankB{} for 1b (the 4B model is not a 1b candidate, see \S\ref{sec:setup}). \sys
+reaches \rFinalA{} (1a) and \rFinalB{} (1b) nDCG@10 on dev with recall@100 of \rRecallFinalA{} /
 \rRecallFinalB{}: \gainOfficialA\% / \gainOfficialB\% above the official baseline and
 \gainBmA\% / \gainBmB\% above our passage BM25 (paired randomisation test against dense
-retrieval: $p\,$\pFinalDenseA{} / $p\,$\pFinalDenseB{}). On train~1b the BGE and Qwen3-0.6B
-fusions are tied (.310 vs.\ .309); on dev the latter would reach \rLateQsmallB{}, so the 1b
-choice is conservative. All final-fusion variants are listed in Table~\ref{tab:full} (Appendix~\ref{app:full}).
+retrieval: $p\,$\pFinalDenseA{} / $p\,$\pFinalDenseB{}). The previous version of the system,
+without the metadata, neighbouring-event and ReasonIR channels, reached \rFinalVoneA{} /
+\rFinalVoneB{} ($p\,$\pFinalVoneA{} / $p\,$\pFinalVoneB{} for the improvement). All
+final-fusion variants are listed in Table~\ref{tab:full} (Appendix~\ref{app:full}).
+
+\paragraph{Comparison with the TEMPO leaderboard.} RETECO's train and dev questions are the
+1{,}730 TEMPO questions, and its 3{,}976 steps are TEMPO's step-wise task. Scored the
+leaderboard's way, over all of them (Table~\ref{tab:tempo}), \sys reaches \pooledFinalA{} on
+questions, above all twelve retrievers on the leaderboard (best: DiVeR, 32.0), and
+\pooledFinalB{} on steps, on par with DiVeR and SFR (33.3) and below ReasonIR (35.0). Only
+ReasonIR given GPT-4o's reasoning (41.0) is clearly ahead on questions. Two caveats apply: our
+corpora are the deduplicated RETECO~v1.1 ones (1.17M vs.\ 1.65M documents), although the
+official document-level BM25 baseline scores alike on both (10.8 on TEMPO; .108 / .115 on
+RETECO train / dev); and the train part of
+these numbers was used to select the pool and the reranker.
 
 \begin{figure}[t]
   \centering
@@ -98,9 +142,10 @@ choice is conservative. All final-fusion variants are listed in Table~\ref{tab:f
 
 \paragraph{Per-domain and per-intent analysis.} \sys improves over the official baseline and
 over passage BM25 in every domain (Figure~\ref{fig:domains}); the largest absolute gains are on
-\emph{law}, \emph{workplace} and \emph{iota} ($+$.23 to $+$.36 nDCG@10). By gold temporal intent (Figure~\ref{fig:intent}), the largest
-gains over BM25 are for \emph{duration} (.149$\rightarrow$.361) and non-temporal questions
-(.128$\rightarrow$.312), whose evidence rarely repeats the question's wording, followed by
-\emph{when} and \emph{period definition}. The only intent where BM25 is competitive is
-\emph{event verification} (16 questions), where the question names the event to be checked and
-lexical matching already finds it.
+\emph{workplace}, \emph{law} and \emph{iota} ($+$.38 to $+$.43 nDCG@10). By gold temporal
+intent (Figure~\ref{fig:intent}), the largest gains over BM25 are for \emph{duration}
+(.149$\rightarrow$.367) and non-temporal questions (.128$\rightarrow$.334), whose evidence
+rarely repeats the question's wording, followed by \emph{when} and \emph{period definition}.
+The smallest gain is for \emph{event verification} (16 questions, .444$\rightarrow$.483), where
+the question names the event to be checked and lexical matching already finds it; there BM25
+is even ahead of dense retrieval.

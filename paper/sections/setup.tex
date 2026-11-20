@@ -7,9 +7,10 @@ corpora) for all 13 domains, without sub-sampling: 1{,}211 train and 519 dev que
 that is not fixed a priori---RM3~$\alpha$, prior weight~$\lambda$, the pool's channels, pure
 vs.\ fused reranking, the final configuration---is selected on \textbf{train}; dev is only
 evaluated, and pool channels and the final reranker are selected separately for 1a and 1b.
-The 4B cross-decoder was run on train and dev 1a and on 12 of the 13 dev domains of 1b; within
-our GPU allocation it could not also be run on the 2{,}762 train steps and the 636 dev steps of
-\emph{history}, so it is a candidate for 1a only, and its 1b column is left empty. Guidance is used only to build the planner's demonstration (train) and for
+The 4B cross-decoder was run on train and dev 1a (on the BM25 $\oplus$ dense candidates and on
+the selected pool) and on 12 of the 13 dev domains of 1b; within our GPU allocation it could
+not also be run on the 2{,}762 train steps and the 636 dev steps of \emph{history}, so it is a
+candidate for 1a only, and its 1b column is left empty. Guidance is used only to build the planner's demonstration (train) and for
 post-hoc analysis (dev). Scoring follows the official protocol: \texttt{pytrec\_eval}
 \texttt{ndcg\_cut\_10} \citep{vangysel2018pytreceval} per topic, topics missing from a run
 count as zero, mean per domain, macro mean over domains; we also report recall@100.
@@ -21,11 +22,13 @@ $k_1{=}0.9$, $b{=}0.4$). Our first row uses the same BM25 parameters on passages
 
 \paragraph{Models.} Dense: Qwen3-Embedding-0.6B (fp16, 384 tokens). Cross-encoders:
 \texttt{ms-marco-MiniLM-L12-v2} (512 tokens) and \texttt{bge-reranker-v2-m3} (1{,}024).
-Cross-decoders: Qwen3-Reranker-0.6B and -4B (bf16, 1{,}024). Generator: Qwen3-8B (bf16,
-non-thinking, greedy decoding) served offline with vLLM~0.8.5. All models are open-weight; no
-model is fine-tuned on RETECO.
+Cross-decoders: Qwen3-Reranker-0.6B and -4B (bf16, 1{,}024). Reasoning-trained retriever:
+ReasonIR-8B (bf16, 512 tokens for passages, 1{,}024 for queries). Generators: Qwen3-8B
+(planner, neighbouring events, reasoning) and Qwen3-1.7B (metadata), bf16, non-thinking,
+greedy decoding, served offline with vLLM~0.8.5. All models are open-weight; no model is
+fine-tuned on RETECO.
 
-\paragraph{Compute.} Indexing and all GPU stages ran on the UHeM Altay cluster (single NVIDIA
-A100 80GB per job, up to four jobs in parallel). \computenote{} The pipeline also runs end to
+\paragraph{Compute.} Indexing and all GPU stages ran on the UHeM Altay cluster (NVIDIA A100
+80GB; one to four GPUs per job). Data, indexes, vectors, models and caches take 93\,GB in total. \computenote{} The pipeline also runs end to
 end on a CPU-only laptop (8~GB RAM) with BM25, \texttt{bge-small}, MiniLM and a 1.5B GGUF
 generator, which we used for development.

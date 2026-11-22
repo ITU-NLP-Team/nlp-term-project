@@ -1,51 +1,17 @@
 \section{Experimental Setup}
 \label{sec:setup}
 
-\paragraph{Data and protocol.} We use the latest RETECO release (v1.1, deduplicated Track~1
-corpora) for all 13 domains, without sub-sampling: 1{,}211 train and 519 dev questions (1a) and
-2{,}762 train and 1{,}214 dev steps (1b) over 1.17M documents (2.41M passages). Every choice
-that is not fixed a priori---the pool's channels and weights, the reranker, RM3~$\alpha$ and the
-prior weights of the ablations---is made on \textbf{train}, separately for 1a and 1b; dev is only
-evaluated. Released guidance is used only to build the expansion prompt's demonstration (train) and for
-post-hoc analysis (dev). Scoring follows the official protocol: \texttt{pytrec\_eval}
-\texttt{ndcg\_cut\_10} \citep{vangysel2018pytreceval} per topic, topics missing from a run count
-as zero, mean per domain, macro mean over domains; we also report recall@100. Significance is a
-two-sided paired randomisation test over topics pooled across domains (10{,}000 permutations,
-\citealp{smucker2007significance}). The official baseline is document-level Lucene BM25 with
-the same $k_1$ and $b$ as ours.
+\paragraph{Data and protocol.} We use RETECO v1.1 for all 13 domains, without sub-sampling:
+1{,}211 train and 519 dev questions (1a), 2{,}762 train and 1{,}214 dev steps (1b). Every choice
+not fixed a priori (channels, weights, reranker, ablation parameters) is made on \textbf{train};
+dev is only evaluated. Guidance is used only for the expansion demonstration (train) and for
+analysis. Scoring follows the official protocol (\texttt{pytrec\_eval} \texttt{ndcg\_cut\_10},
+\citealp{vangysel2018pytreceval}; missing topics count as zero; macro mean over domains).
+Significance is a paired randomisation test over topics pooled across domains (10{,}000
+permutations, \citealp{smucker2007significance}).
 
-\paragraph{Models.} All models are open-weight and none is fine-tuned on RETECO:
-Qwen3-Embedding-0.6B (fp16, 384 tokens) and ReasonIR-8B (bf16, 512 tokens for passages, 1{,}024
-for queries) as retrievers; Qwen3-8B and Qwen3-1.7B as generators (bf16, greedy,
-non-thinking mode, served offline with vLLM~0.8.5); MiniLM-L12 (512 tokens), BGE-reranker-v2-m3,
-Qwen3-Reranker-0.6B and -4B (1{,}024 tokens) as rerankers.
-
-\paragraph{Compute.} All GPU work ran on the UHeM Altay cluster of Istanbul Technical University,
-on nodes with four NVIDIA A100 80\,GB GPUs and 64 CPU cores, scheduled with SLURM;
-Table~\ref{tab:compute} lists the cost of each stage. Indexes, vectors, models and caches take
-93\,GB of storage in total. Within our allocation, the 4B reranker was run on train and dev 1a
-and on 12 of the 13 dev domains of 1b, but not on the 2{,}762 train steps, so it is a candidate
-for 1a only. The code also runs end to end on a CPU-only laptop (8\,GB RAM) with smaller
-models, which we used for development.
-
-\begin{table}[t]
-\centering
-\small
-\setlength{\tabcolsep}{3pt}
-\resizebox{\columnwidth}{!}{%
-\begin{tabular}{llr}
-\toprule
-\textbf{Stage} & \textbf{Model} & \textbf{Cost} \\
-\midrule
-Embed 2.41M passages & Qwen3-Emb.-0.6B & 3.5 GPU-h \\
-Embed 2.41M passages & ReasonIR-8B & 20 GPU-h \\
-Metadata, 1.17M docs & Qwen3-1.7B & 11 GPU-h \\
-Expansions, 1{,}730 questions & Qwen3-8B & 9 min / pass \\
-Rerank 100 candidates & Qwen3-Rer.-0.6B & 1.05 s / topic \\
-Rerank 100 candidates & Qwen3-Rer.-4B & 3.8 s / topic \\
-\bottomrule
-\end{tabular}}
-\caption{Compute per stage on NVIDIA A100 80\,GB GPUs (GPU-h: A100-hours). BM25 indexing,
-fusion and evaluation run on CPU.}
-\label{tab:compute}
-\end{table}
+\paragraph{Models and compute.} All models are open-weight and none is fine-tuned on RETECO
+(Appendix~\ref{app:hparams}). GPU work ran on the UHeM Altay cluster at Istanbul Technical
+University, on nodes with four NVIDIA A100 80\,GB GPUs; the most expensive stage, embedding
+2.41M passages with ReasonIR-8B, took 20 A100-hours (Table~\ref{tab:compute}). The 4B reranker
+was not run on the 2{,}762 train steps of 1b, so it is a candidate for 1a only.

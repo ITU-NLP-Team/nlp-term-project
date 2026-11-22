@@ -1,38 +1,73 @@
 \section{Background}
 \label{sec:background}
 
-\paragraph{Task.} Track~1 of RETECO is built on TEMPO \citep{abdallah2026tempo}: StackExchange
-questions from 13 domains (blockchain, social sciences, applied and STEM sites), each domain
-with its own corpus (1{,}167{,}159 documents in v1.1, after deduplication). In Sub-track~1a a
-system ranks documents for the whole question; in Sub-track~1b it ranks documents for each
-step of an annotated reasoning decomposition. Relevance is binary and requires a passage to be
-both topical and temporally useful. The metric is nDCG@10, averaged per domain and
-macro-averaged over domains. The released train/dev splits are 70/30 per domain; the test set
-is hidden. For train/dev queries, TEMPO also releases \emph{query guidance}---temporal intent,
-expected granularity, time anchors, temporal events and a step-wise retrieval plan---which is
-not available at test time.
+\begin{figure*}[t]
+  \centering
+  \resizebox{\textwidth}{!}{%
+  \begin{tikzpicture}[
+      node distance=3mm and 5mm,
+      box/.style={draw, rounded corners=2pt, align=center, font=\scriptsize,
+                  minimum height=8mm, inner sep=3pt, fill=#1},
+      box/.default=white,
+      lab/.style={font=\scriptsize\itshape, text=black!60},
+      arr/.style={-{Latex[length=1.6mm]}, thick, black!70}]
+    % ---------------- offline
+    \node[box=gray!10, minimum width=18mm] (corpus) {domain corpus\\(1.17M documents)};
+    \node[box=blue!8, right=of corpus, yshift=7mm, minimum width=26mm] (chunk)
+      {200-word passages\\(2.41M, MaxP)};
+    \node[box=blue!8, right=of corpus, yshift=-12mm, minimum width=26mm] (meta)
+      {Qwen3-1.7B metadata:\\period, events, entities};
+    \node[box=blue!15, right=of chunk, yshift=7mm, minimum width=24mm] (bm25) {BM25};
+    \node[box=blue!15, below=1.5mm of bm25, minimum width=24mm] (dense)
+      {Qwen3-Embedding-0.6B};
+    \node[box=blue!15, below=1.5mm of dense, minimum width=24mm] (rir) {ReasonIR-8B};
+    \node[box=blue!15, below=1.5mm of rir, minimum width=24mm] (mindex) {metadata index};
+    \draw[arr] (corpus) -- (chunk); \draw[arr] (corpus) -- (meta);
+    \draw[arr] (chunk.east) -- (bm25.west); \draw[arr] (chunk.east) -- (dense.west);
+    \draw[arr] (chunk.east) -- (rir.west); \draw[arr] (meta.east) -- (mindex.west);
+    \node[lab, above=0.5mm of chunk] {offline, per domain};
+    % ---------------- online
+    \node[box=gray!10, right=14mm of bm25, minimum width=16mm] (q) {question\\or step};
+    \node[box=orange!15, below=5mm of q, minimum width=30mm] (llm)
+      {Qwen3-8B (+ top-5 BM25):\\pseudo answer, sub-queries,\\neighbouring events,
+       reasoning};
+    \node[lab, above=0.5mm of q] {online};
+    \node[box=orange!8, right=8mm of q, yshift=-6mm, minimum width=30mm] (chan)
+      {first-stage channels\\(BM25, dense, ReasonIR\\with the expanded queries)};
+    \node[box=green!12, right=of chan, minimum width=22mm] (pool)
+      {pool: weighted RRF\\of channels chosen\\on train};
+    \node[box=green!20, right=of pool, minimum width=26mm] (rr)
+      {Qwen3-Reranker\\scores the top-100};
+    \node[box=green!28, right=of rr, minimum width=12mm] (fin) {RRF};
+    \node[box=gray!10, right=of fin, minimum width=10mm] (out) {top-10};
+    \draw[arr] (q) -- (llm);
+    \draw[arr] (q.east) -- (chan.north west);
+    \draw[arr] (llm.east) -- (chan.south west);
+    \draw[arr] (chan) -- (pool); \draw[arr] (pool) -- (rr); \draw[arr] (rr) -- (fin);
+    \draw[arr] (pool.south) -- ++(0,-5mm) -| (fin.south);
+    \draw[arr] (fin) -- (out);
+    \draw[arr, dashed] (bm25.east) -- (q.west);
+    \draw[arr, dashed] (mindex.east) -| (chan.south);
+  \end{tikzpicture}}
+  \caption{\sys. Offline: passages, BM25, two dense indexes and an LLM metadata index. Online:
+  Qwen3-8B expands the question; the train-selected channels are fused into a pool whose top-100
+  a decoder reranker rescores.}
+  \label{fig:overview}
+\end{figure*}
 
-\paragraph{Lexical and dense retrieval.} BM25 \citep{robertson2009bm25} remains a strong
-first stage; passage-level scoring with MaxP \citep{dai2019maxp} handles long documents.
-Pseudo-relevance feedback (RM3; \citealp{lavrenko2001relevance,abduljaleel2004umass}) expands a
-query with terms from its top results. Dense bi-encoders \citep{karpukhin2020dpr,xiao2023cpack}
-and recent LLM-based embedders \citep{zhang2025qwen3emb} capture semantic similarity;
-reciprocal rank fusion (RRF; \citealp{cormack2009rrf}) is a robust way to combine rankings.
-Reasoning-intensive benchmarks such as BRIGHT \citep{su2025bright} show that both families
-struggle when relevance requires inference, which motivated reasoning-trained retrievers
-\citep{shao2025reasonir}.
+\paragraph{Task.} Each of TEMPO's 13 domains has its own corpus (1{,}167{,}159 documents in
+RETECO v1.1). Sub-track~1a ranks documents for the whole question, Sub-track~1b for each step of
+an annotated reasoning decomposition. Relevance is binary; the metric is nDCG@10, averaged per
+domain and macro-averaged over domains. Train/dev splits are 70/30 per domain and the test set is
+hidden. Train/dev queries come with \emph{query guidance} (temporal intent, anchors, events, a
+retrieval plan) that is not available at test time.
 
-\paragraph{LLMs for retrieval.} LLMs rewrite queries by generating hypothetical documents
-(HyDE, \citealp{gao2023hyde}; query2doc, \citealp{wang2023query2doc}) or multiple sub-queries
-whose results are fused \citep{rackauckas2024ragfusion}. For reranking, encoder
-cross-encoders \citep{nogueira2019passage} were followed by sequence-to-sequence
-\citep{nogueira2020monot5} and decoder-only pointwise rerankers \citep{zhang2025qwen3emb}, and
-by listwise prompting \citep{sun2023rankgpt}.
-
-\paragraph{Temporal IR.} Temporal expression taggers \citep{strotgen2010heideltime} normalise
-dates; time-aware ranking combines textual relevance with a temporal similarity between query
-and document \citep{campos2014survey}, and the temporal profile of a query can be estimated from
-the dates of its top-ranked documents \citep{jones2007temporal}. TEMPO's analysis reports that
-lexical, dense and reasoning retrievers all stay far below their performance on non-temporal
-benchmarks, and that a reasoning retriever gains most when the query is extended with an LLM's
-reasoning \citep{abdallah2026tempo}.
+\paragraph{Related work.} BM25 \citep{robertson2009bm25} with passage-level MaxP scoring
+\citep{dai2019maxp}, dense \citep{karpukhin2020dpr,zhang2025qwen3emb} and reasoning-trained
+retrievers \citep{su2025bright,shao2025reasonir} are combined with reciprocal rank fusion
+(RRF; \citealp{cormack2009rrf}). LLMs expand queries with hypothetical documents
+\citep{gao2023hyde,wang2023query2doc} or sub-queries \citep{rackauckas2024ragfusion}, and rerank
+as cross-encoders \citep{nogueira2019passage} or decoders \citep{nogueira2020monot5,zhang2025qwen3emb}.
+Time-aware ranking combines text relevance with a temporal similarity between query and document
+\citep{campos2014survey,jones2007temporal}. TEMPO reports that a reasoning retriever gains most
+when the query is extended with an LLM's reasoning \citep{abdallah2026tempo}.

@@ -4,107 +4,60 @@
 \input{tables/main}
 \input{tables/tempo}
 
-Table~\ref{tab:main} gives the headline numbers and Table~\ref{tab:full} in
-Appendix~\ref{app:full} every system with recall@100 and significance against our passage BM25.
+Table~\ref{tab:main} gives the headline numbers; Table~\ref{tab:full} (Appendix~\ref{app:full})
+lists every system with recall@100 and significance.
 
 \paragraph{Main result.} \sys reaches \rFinalA{} (1a) and \rFinalB{} (1b) nDCG@10 on dev
 (\rTrainFinalA{} / \rTrainFinalB{} on train), \gainOfficialA\% / \gainOfficialB\% above the
-official baseline and \gainBmA\% / \gainBmB\% above our passage BM25; it is better than dense
-retrieval alone at $p\,$\pFinalDenseA{} / $p\,$\pFinalDenseB{}. The reranker selected on train
-is \finalRerankA{} for 1a and \finalRerankB{} for 1b. Our earlier configuration, without the
-neighbouring-event, ReasonIR and metadata channels, reached \rFinalVoneA{} / \rFinalVoneB{}
-($p\,$\pFinalVoneA{} / $p\,$\pFinalVoneB{} for the difference).
+official baseline, and is better than dense retrieval alone at $p\,$\pFinalDenseA{} /
+$p\,$\pFinalDenseB{}. The train-selected reranker is \finalRerankA{} for 1a and \finalRerankB{}
+for 1b. It improves over the baseline in every domain (Appendix~\ref{app:analysis}).
 
-\paragraph{Passages explain most of the baseline gap.} Scoring 200-word passages with MaxP
-instead of whole documents raises BM25 from \rOfficialA{} to \rBmA{} (1a) and from
-\rOfficialB{} to \rBmB{} (1b) with the same $k_1$ and $b$. TEMPO documents include long dumps
-whose length normalisation buries the one relevant paragraph; the gain is largest where the
-official scores are near zero (\emph{bitcoin}, \emph{monero}, \emph{quant}, \emph{workplace};
-Figure~\ref{fig:domains}).
+\paragraph{Passages explain most of the baseline gap.} Scoring passages with MaxP raises BM25
+from \rOfficialA{} to \rBmA{} (1a) and \rOfficialB{} to \rBmB{} (1b) with the same $k_1$ and $b$:
+length normalisation buries the one relevant paragraph of long dumps.
 
 \input{tables/data}
 
 \paragraph{Date matching does not help.} Every time-matching component is neutral or harmful
-(Table~\ref{tab:full}). With rule-based years, the prior's weight selected on train is near zero
-(\rPriorExpA{} vs.\ \rBmA{}), fusing year-filtered BM25 costs \rBmA{}$\rightarrow$\rBmTimeA{}
-and the entity--year graph \rBmA{}$\rightarrow$\rBmKgA{}. Periods inferred by the LLM, which
-also cover implicit periods, do not change this: the period filter costs a little for BM25
-(\rBmA{}$\rightarrow$\rMetaTfBmA{}) and for dense retrieval (\rDenseA{}$\rightarrow$\rMetaTfDenseA{}),
-and the period prior is switched off on 1b ($\lambda{=}\metaPriorLamB$), while its small 1a dev
-gain (\rBmDenseA{}$\rightarrow$\rMetaPriorA{}) is absent on train. Table~\ref{tab:data} explains
-why: gold documents mention years \emph{less} often than the non-relevant documents BM25
-retrieves, and overlap the question's years less often (\pctGoldOverlap{} vs.\
-\pctTopOverlap{}). Statistical feedback also hurts (RM3: \rRmA{}).
+(Table~\ref{tab:full}). With rule-based years the train-selected prior weight is near zero
+(\rPriorExpA{} vs.\ \rBmA{}); year-filtered BM25 costs \rBmA{}$\rightarrow$\rBmTimeA{} and the
+entity--year graph \rBmA{}$\rightarrow$\rBmKgA{}. LLM-inferred periods do not change this: the
+period filter costs a little for BM25 (\rMetaTfBmA{}) and dense retrieval (\rDenseA{}$\rightarrow$\rMetaTfDenseA{}),
+and the period prior is switched off on 1b and gives no gain on 1a train. Table~\ref{tab:data}
+explains why: gold documents mention years less often, and overlap the question's years less
+often, than the non-relevant documents BM25 retrieves. RM3 also hurts (\rRmA{}).
 
-\paragraph{Dense and reasoning-trained retrieval.} Qwen3-Embedding-0.6B reaches \rDenseA{} (1a)
-and \rDenseB{} (1b); its document vectors \rDenseDocA{} (1a). ReasonIR-8B is the strongest single
-retriever, \rRirA{} and \rRirB{}, with the highest recall@100 of any single channel. Appending
-Qwen3-8B's reasoning helps on 1a (\rRirReasonA{}) but not on 1b (\rRirReasonB{}); neither
-difference is significant. Over all TEMPO questions our passage-level ReasonIR (\pooledRirA{})
-is close to the leaderboard's ReasonIR (27.2), and our reasoning adds one point
-(\pooledRirReasonA{}), far from the 13.8 points reported with GPT-4o's reasoning
-\citep{abdallah2026tempo}: the quality of the reasoning, not the mechanism, carries that gain.
+\paragraph{Dense and reasoning-trained retrieval.} Qwen3-Embedding reaches \rDenseA{} / \rDenseB{}
+and ReasonIR-8B, the strongest single retriever, \rRirA{} / \rRirB{}. Appending Qwen3-8B's
+reasoning gives \rRirReasonA{} / \rRirReasonB{} (not significant); over all TEMPO questions it adds
+one point (\pooledRirA{}$\rightarrow$\pooledRirReasonA{}), far from the 13.8 points reported with
+GPT-4o's reasoning \citep{abdallah2026tempo}: the quality of the reasoning carries that gain.
 
-\paragraph{LLM query expansion.} The LLM's hypothetical answer lifts BM25 from \rBmA{} to
-\rQtdA{} on 1a, and to \rQtdFbA{} when the model also sees the top BM25 snippets; sub-queries
-with the event chain reach \rMultiA{}. The LLM keeps the vocabulary of the feedback documents
-that fits the question and drops the rest, which RM3 cannot do. On 1b the gains are smaller (best: \rMultiFbB{}
-vs.\ \rBmB{}), since the expansions describe the parent question rather than the
-step. Asking for the events \emph{around} the question raises recall most: with BM25 only it
-lifts recall@100 from \rRecallBmA{} to .630 on 1a (\rNbrBmA{} nDCG@10), and with dense runs for
-every sub-query and event it reaches \rNbrHybridA{} / \rNbrHybridB{} with recall@100 of .750 /
-.819, and is the best single channel on 1a train. The small LLM's metadata helps as content
-rather than as time: adding the question's events, entities and keywords to BM25 gives
-\rMetaKwA{} on 1a.
+\paragraph{LLM query expansion.} The hypothetical answer lifts BM25 from \rBmA{} to \rQtdA{} on
+1a, and to \rQtdFbA{} with BM25 feedback; sub-queries reach \rMultiA{}. The LLM keeps the feedback
+vocabulary that fits the question, which RM3 cannot do. On 1b gains are smaller (best
+\rMultiFbB{} vs.\ \rBmB{}), as expansions describe the parent question. Neighbouring events raise
+recall most: with BM25 and dense runs per event they reach \rNbrHybridA{} / \rNbrHybridB{}
+(recall@100 .750 / .819), the best single channel on 1a train. The metadata index helps as
+content, not as time (\rMetaKwA{} on 1a).
 
-\paragraph{Pool.} Forward selection on train picks \poolChannelsA{} for 1a and \poolChannelsB{}
-for 1b. The pools reach \rPoolA{} / \rPoolB{} on dev with recall@100 of \rRecallPoolA{} /
-\rRecallPoolB{} (BM25: \rRecallBmA{} / \rRecallBmB{}). Alone, the LLM channels stay below the
-dense retrievers, but they are complementary to them.
+\paragraph{Pool.} Forward selection picks \poolChannelsA{} for 1a and \poolChannelsB{} for 1b,
+reaching \rPoolA{} / \rPoolB{} with recall@100 \rRecallPoolA{} / \rRecallPoolB{} (BM25:
+\rRecallBmA{} / \rRecallBmB{}). The LLM channels are weaker than dense retrievers alone but
+complementary to them.
 
 \input{tables/rerank}
 
-\paragraph{Cross-encoders vs.\ cross-decoders.} Table~\ref{tab:rerank} compares the four
-rerankers on one fixed candidate set, the top-100 of BM25 $\oplus$ dense (\rBmDenseA{} on 1a).
-The encoder cross-encoders \emph{hurt} when used alone (MiniLM \rMiniLMA{}, BGE-v2-m3 \rBgeA{})
-and only approach the candidate ranking when fused with it: trained on short web passages, they
-reward lexical overlap with long StackExchange questions. The decoder rerankers, prompted with
-RETECO's notion of relevance, improve on it: Qwen3-Reranker-0.6B reaches \rQsmallRRA{} alone and
-\rQsmallRRPoolA{} fused, the 4B model \rQbigRRA{}. On 1b the picture is the same (\rMiniLMB{},
-\rBgeB{} and \rQsmallRRB{} alone vs.\ \rBmDenseB{}). The gap between the two families is larger
-than the gap between the two decoder sizes.
+\paragraph{Cross-encoders vs.\ cross-decoders.} On one fixed candidate set (Table~\ref{tab:rerank}),
+encoder cross-encoders \emph{hurt} alone (MiniLM \rMiniLMA{}, BGE \rBgeA{} vs.\ \rBmDenseA{}):
+trained on short web passages, they reward lexical overlap with long questions. Decoder rerankers
+prompted with RETECO's notion of relevance improve on it (0.6B \rQsmallRRPoolA{} fused, 4B
+\rQbigRRA{}); the gap between the families exceeds the gap between decoder sizes.
 
-\paragraph{Comparison with the TEMPO leaderboard.} RETECO's train and dev questions are the
-1{,}730 TEMPO questions, and its 3{,}976 steps are TEMPO's step-wise task. Scored over all of
-them (Table~\ref{tab:tempo}), \sys reaches \pooledFinalA{} on questions, above all twelve
-retrievers on the leaderboard (best: DiVeR, 32.0), and \pooledFinalB{} on steps, on par with
-DiVeR and SFR (33.3) and below ReasonIR (35.0). Only ReasonIR given GPT-4o's reasoning (41.0)
-is clearly ahead on questions. Two caveats apply: our corpora are the deduplicated RETECO~v1.1
-ones (1.17M vs.\ 1.65M documents), although the official document-level BM25 scores alike on
-both (10.8 on TEMPO; .108 / .115 on RETECO train / dev); and the train part of these numbers
-was used to select the pool and the reranker.
-
-\begin{figure*}[t]
-  \centering
-  \includegraphics[width=0.9\textwidth]{figures/per_domain.pdf}
-  \caption{Per-domain nDCG@10 on 1a dev: official document-level BM25, our passage BM25, and
-  \sys.}
-  \label{fig:domains}
-\end{figure*}
-
-\begin{figure}[t]
-  \centering
-  \includegraphics[width=\columnwidth]{figures/intent.pdf}
-  \caption{nDCG@10 by gold temporal intent (1a dev; guidance used for analysis only).
-  Number of questions in parentheses.}
-  \label{fig:intent}
-\end{figure}
-
-\paragraph{Per-domain and per-intent analysis.} \sys improves over the official baseline and
-over passage BM25 in every domain on 1a (Figure~\ref{fig:domains}); the largest absolute gains
-are on \emph{workplace}, \emph{law} and \emph{iota} ($+$.38 to $+$.43 nDCG@10). By gold
-temporal intent (Figure~\ref{fig:intent}), the largest gains over BM25 are for \emph{duration}
-(.149$\rightarrow$.367) and non-temporal questions (.128$\rightarrow$.334), whose evidence
-rarely repeats the question's wording. The smallest gain is for \emph{event verification}
-(16 questions, .444$\rightarrow$.483), where the question names the event to be checked and
-lexical matching already finds it.
+\paragraph{TEMPO leaderboard.} RETECO train $+$ dev are TEMPO's 1{,}730 questions and 3{,}976
+steps. On them (Table~\ref{tab:tempo}) \sys reaches \pooledFinalA{} on questions, above the best
+leaderboard retriever (DiVeR, 32.0), and \pooledFinalB{} on steps, on par with DiVeR and SFR and
+below ReasonIR (35.0); only ReasonIR with GPT-4o reasoning (41.0) is clearly ahead. Our corpora
+are deduplicated (1.17M vs.\ 1.65M documents), though official BM25 scores alike on both, and the
+train part was used for selection.

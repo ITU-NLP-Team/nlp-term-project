@@ -90,8 +90,37 @@ Instructions:
 contains evidence that helps answer it, including information about the relevant events and
 time period.''}
 
-\section{Hyper-parameters}
+\section{Models, Hyper-parameters and Compute}
 \label{app:hparams}
+Qwen3-Embedding-0.6B (fp16, 384 tokens) and ReasonIR-8B (bf16, 512 tokens for passages, 1{,}024
+for queries) are the retrievers; Qwen3-8B and Qwen3-1.7B the generators (bf16, greedy,
+non-thinking, vLLM~0.8.5); MiniLM-L12, BGE-reranker-v2-m3 and Qwen3-Reranker-0.6B/-4B
+(1{,}024 tokens) the rerankers. Nodes have four A100 80\,GB GPUs and 64 CPU cores (SLURM);
+indexes, vectors, models and caches take 93\,GB. The code also runs on a CPU-only laptop with
+smaller models.
+
+\begin{table}[h]
+\centering
+\small
+\setlength{\tabcolsep}{3pt}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{llr}
+\toprule
+\textbf{Stage} & \textbf{Model} & \textbf{Cost} \\
+\midrule
+Embed 2.41M passages & Qwen3-Emb.-0.6B & 3.5 GPU-h \\
+Embed 2.41M passages & ReasonIR-8B & 20 GPU-h \\
+Metadata, 1.17M docs & Qwen3-1.7B & 11 GPU-h \\
+Expansions, 1{,}730 questions & Qwen3-8B & 9 min / pass \\
+Rerank 100 candidates & Qwen3-Rer.-0.6B & 1.05 s / topic \\
+Rerank 100 candidates & Qwen3-Rer.-4B & 3.8 s / topic \\
+\bottomrule
+\end{tabular}}
+\caption{Compute per stage on NVIDIA A100 80\,GB GPUs (GPU-h: A100-hours). BM25 indexing,
+fusion and evaluation run on CPU.}
+\label{tab:compute}
+\end{table}
+
 \begin{table}[h]
 \centering\small
 \begin{tabular}{ll}
@@ -117,3 +146,30 @@ Temporal graph & entity df $\leq$5\%, PPR 0.85 \\
 \end{tabular}
 \caption{Hyper-parameters. Sets in braces are searched on train.}
 \end{table}
+
+\section{Per-Domain and Per-Intent Analysis}
+\label{app:analysis}
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=0.9\textwidth]{figures/per_domain.pdf}
+  \caption{Per-domain nDCG@10 on 1a dev: official document-level BM25, our passage BM25, and
+  \sys.}
+  \label{fig:domains}
+\end{figure*}
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=\columnwidth]{figures/intent.pdf}
+  \caption{nDCG@10 by gold temporal intent (1a dev; guidance used for analysis only).
+  Number of questions in parentheses.}
+  \label{fig:intent}
+\end{figure}
+
+\sys improves over the official baseline and
+over passage BM25 in every domain on 1a (Figure~\ref{fig:domains}); the largest absolute gains
+are on \emph{workplace}, \emph{law} and \emph{iota} ($+$.38 to $+$.43 nDCG@10). By gold
+temporal intent (Figure~\ref{fig:intent}), the largest gains over BM25 are for \emph{duration}
+(.149$\rightarrow$.367) and non-temporal questions (.128$\rightarrow$.334), whose evidence
+rarely repeats the question's wording. The smallest gain is for \emph{event verification}
+(16 questions, .444$\rightarrow$.483), where the question names the event to be checked and
+lexical matching already finds it.

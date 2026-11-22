@@ -1,47 +1,27 @@
 \section{Introduction}
 \label{sec:intro}
 
-Retrieval-augmented generation assumes that the retriever surfaces evidence that is valid
-\emph{for the question being asked}. For temporally grounded questions---``Why did the number
-of transactions per block jump in 2023?''---validity depends on time: a passage on the right
-topic but about the wrong period is misleading evidence. Track~1 of the RETECO shared task
-(SemEval-2027 Task~1) operationalises this with TEMPO \citep{abdallah2026tempo}, a 13-domain
-benchmark of StackExchange questions whose relevant documents must be both topical and
-temporally useful. The official BM25 baseline reaches only \rOfficialA{} (Sub-track~1a) and
-\rOfficialB{} (1b) nDCG@10 on the development set.
+For temporally grounded questions---``Why did the number of transactions per block jump in
+2023?''---a passage on the right topic but about the wrong period is misleading evidence.
+Track~1 of RETECO (SemEval-2027 Task~1; \citealp{reteco2027task}) operationalises this with
+TEMPO \citep{abdallah2026tempo}, a 13-domain benchmark of English StackExchange questions whose
+relevant documents must be both topical and temporally useful. The official BM25 baseline
+reaches only \rOfficialA{} (Sub-track~1a) and \rOfficialB{} (1b) nDCG@10 on dev.
 
-A natural reading of the task is that systems should \emph{match time}: extract dates from
-questions and documents and restrict or boost by period. We tested this directly, with
-rule-based years and with periods that a small LLM infers for every document and question, and
-found that it does not help. Among questions that mention a year, only \pctGoldOverlap{} of gold
+A natural reading of the task is that systems should \emph{match time}. We tested this with
+rule-based years and with periods a small LLM infers for every document and question, and found
+that it does not help: among questions that mention a year, only \pctGoldOverlap{} of gold
 documents mention a year within $\pm1$ of it, against \pctTopOverlap{} of the non-relevant
-documents that BM25 ranks in its top~10 (Table~\ref{tab:data}): lexical retrieval already
-over-rewards matching dates. Relevant evidence instead describes the events and mechanisms
+documents in BM25's top~10 (Table~\ref{tab:data}). Relevant evidence describes the events
 behind a question, often without repeating its dates.
 
-\sys is built on that observation. It retrieves passages rather than whole documents, which
-alone lifts BM25 from \rOfficialA{} to \rBmA{} (1a); it adds a dense embedder and a
-reasoning-trained retriever (ReasonIR-8B); and it lets an LLM expand each question with a
-hypothetical answer, sub-queries, the events \emph{neighbouring} the question (its causes,
-earlier and later events, each with a year) and free-text reasoning. The channels to fuse are
-selected on train, and a decoder LLM reranks the top-100. On dev, \sys reaches \rFinalA{}
-nDCG@10 on 1a and \rFinalB{} on 1b, \gainOfficialA\% and \gainOfficialB\% above the official
-baseline. Because RETECO's train and dev questions are the 1{,}730 TEMPO questions, we can also
-place it on the TEMPO leaderboard (Table~\ref{tab:tempo}): with \pooledFinalA{} on questions it
-is above all twelve published retrievers, though below a reasoning retriever given GPT-4o's
-reasoning (41.0).
-
-Our contributions are:
-\begin{itemize}
-  \item A system for both sub-tracks that combines passage retrieval, dense and
-        reasoning-trained retrieval, LLM query expansion with neighbouring events, a
-        train-selected fusion and LLM reranking, evaluated on all 13 domains without
-        sub-sampling.
-  \item Evidence that date matching is not a useful relevance signal on TEMPO, whether dates
-        come from rules or from an LLM.
-  \item A comparison of encoder cross-encoders and decoder LLM rerankers on the same
-        candidates, and a comparison with the TEMPO leaderboard on the same questions.
-  \item Open code that runs on a GPU cluster and on a laptop CPU, with cached stages, official
-        scoring and significance tests.\footnote{Code:
-        \url{https://github.com/ITU-NLP-Team/nlp-term-project}}
-\end{itemize}
+\sys is built on that observation. It retrieves 200-word passages, which alone lifts BM25 from
+\rOfficialA{} to \rBmA{} (1a); adds a dense embedder and a reasoning-trained retriever
+(ReasonIR-8B); lets an LLM expand each question with a hypothetical answer, sub-queries and the
+events \emph{neighbouring} it; fuses the channels selected on train; and reranks the top-100
+with a decoder LLM. It reaches \rFinalA{} (1a) and \rFinalB{} (1b) nDCG@10 on dev, and
+\pooledFinalA{} on all 1{,}730 TEMPO questions, above all twelve retrievers on the TEMPO
+leaderboard (Table~\ref{tab:tempo}). Our contributions are (i)~a system evaluated on all 13
+domains without sub-sampling, (ii)~evidence that date matching is not a useful relevance signal
+on TEMPO, and (iii)~a comparison of encoder cross-encoders and decoder LLM rerankers on the same
+candidates. Code is open.\footnote{\url{https://github.com/ITU-NLP-Team/nlp-term-project}}
